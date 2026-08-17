@@ -1004,7 +1004,39 @@ function commandAvailable(
                         env: process.env
                     }
                 );
+function commandDetails(command) {
+    return new Promise((resolve) => {
+        const child = spawn(command, ["--version"], {
+            env: process.env
+        });
 
+        let stdout = "";
+        let stderr = "";
+
+        child.stdout.on("data", (data) => {
+            stdout += data.toString();
+        });
+
+        child.stderr.on("data", (data) => {
+            stderr += data.toString();
+        });
+
+        child.on("error", (error) => {
+            resolve({
+                available: false,
+                error: error.message
+            });
+        });
+
+        child.on("close", (code) => {
+            resolve({
+                available: code === 0,
+                exitCode: code,
+                output: (stdout || stderr).slice(0, 1000)
+            });
+        });
+    });
+}
             child.on(
                 "error",
                 () => {
