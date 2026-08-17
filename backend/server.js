@@ -15,23 +15,28 @@ const DOWNLOAD_DIR = path.resolve("downloads");
 fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 
 
-/* =========================
+/* ==========================================
    CORS
-========================= */
+========================================== */
 
 app.use(
     cors({
-        origin: true,
-        methods: ["GET", "POST", "OPTIONS"]
+        origin: [
+            "https://grazyguy.github.io",
+            "http://localhost:3000",
+            "http://localhost:5173"
+        ],
+        methods: ["GET", "POST", "OPTIONS"],
+        allowedHeaders: ["Content-Type"]
     })
 );
 
 app.use(express.json());
 
 
-/* =========================
-   FILE UPLOAD
-========================= */
+/* ==========================================
+   UPLOAD
+========================================== */
 
 const storage = multer.diskStorage({
 
@@ -49,9 +54,7 @@ const storage = multer.diskStorage({
             null,
             `${id}${extension}`
         );
-
     }
-
 });
 
 
@@ -60,18 +63,14 @@ const upload = multer({
     storage,
 
     limits: {
-
-        fileSize:
-            500 * 1024 * 1024
-
+        fileSize: 500 * 1024 * 1024
     }
-
 });
 
 
-/* =========================
-   TEST
-========================= */
+/* ==========================================
+   HEALTH CHECK
+========================================== */
 
 app.get("/", (req, res) => {
 
@@ -79,23 +78,54 @@ app.get("/", (req, res) => {
 
         success: true,
 
-        service:
-            "MediaForge API",
+        service: "MediaForge API",
 
-        status:
-            "online",
+        status: "online",
 
-        ffmpeg:
-            "available"
+        ffmpeg: "available"
 
     });
 
 });
 
 
-/* =========================
+/* ==========================================
+   FFMPEG VERSION TEST
+========================================== */
+
+app.get("/api/ffmpeg", async (req, res) => {
+
+    try {
+
+        const version =
+            await runFFmpegVersion();
+
+        res.json({
+
+            success: true,
+
+            ffmpeg: version
+
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+
+            success: false,
+
+            error: error.message
+
+        });
+
+    }
+
+});
+
+
+/* ==========================================
    CONVERT
-========================= */
+========================================== */
 
 app.post(
     "/api/convert",
@@ -104,8 +134,13 @@ app.post(
     async (req, res) => {
 
         let inputFile = null;
+        let outputFile = null;
 
         try {
+
+            /* ==========================
+               DATEI PRÜFEN
+            ========================== */
 
             if (!req.file) {
 
@@ -114,7 +149,7 @@ app.post(
                     success: false,
 
                     error:
-                        "Bitte eine Datei hochladen."
+                        "Keine Datei empfangen. Bitte zuerst eine Audio- oder Videodatei auswählen."
 
                 });
 
@@ -124,6 +159,10 @@ app.post(
             inputFile =
                 req.file.path;
 
+
+            /* ==========================
+               FORMAT
+            ========================== */
 
             const format =
                 String(
@@ -155,12 +194,16 @@ app.post(
                     success: false,
 
                     error:
-                        "Dieses Format wird nicht unterstützt."
+                        `Format "${format}" wird nicht unterstützt.`
 
                 });
 
             }
 
+
+            /* ==========================
+               DATEINAME
+            ========================== */
 
             const requestedName =
                 String(
@@ -175,7 +218,8 @@ app.post(
                         /[^a-zA-Z0-9äöüÄÖÜéèà._ -]/g,
                         ""
                     )
-                    .trim() ||
+                    .trim()
+                    .slice(0, 100) ||
                 "mediaforge-datei";
 
 
@@ -183,18 +227,47 @@ app.post(
                 `${safeName}-${Date.now()}.${format}`;
 
 
-            const outputFile =
+            outputFile =
                 path.join(
                     DOWNLOAD_DIR,
                     outputName
                 );
 
 
-            const audioQuality =
+            /* ==========================
+               AUDIO QUALITÄT
+            ========================== */
+
+            const allowedAudioQualities = [
+                "96",
+                "128",
+                "160",
+                "192",
+                "256",
+                "320"
+            ];
+
+
+            let audioQuality =
                 String(
                     req.body.audioQuality || "192"
                 );
 
+
+            if (
+                !allowedAudioQualities.includes(
+                    audioQuality
+                )
+            ) {
+
+                audioQuality = "192";
+
+            }
+
+
+            /* ==========================
+               FFMPEG ARGUMENTE
+            ========================== */
 
             const ffmpegArgs = [
 
@@ -206,9 +279,9 @@ app.post(
             ];
 
 
-            /* =========================
+            /* ==========================
                MP3
-            ========================= */
+            ========================== */
 
             if (format === "mp3") {
 
@@ -216,7 +289,7 @@ app.post(
 
                     "-vn",
 
-                    "-codec:a",
+                    "-c:a",
                     "libmp3lame",
 
                     "-b:a",
@@ -227,9 +300,9 @@ app.post(
             }
 
 
-            /* =========================
+            /* ==========================
                M4A
-            ========================= */
+            ========================== */
 
             else if (format === "m4a") {
 
@@ -237,7 +310,7 @@ app.post(
 
                     "-vn",
 
-                    "-codec:a",
+                    "-c:a",
                     "aac",
 
                     "-b:a",
@@ -248,9 +321,9 @@ app.post(
             }
 
 
-            /* =========================
+            /* ==========================
                WAV
-            ========================= */
+            ========================== */
 
             else if (format === "wav") {
 
@@ -258,7 +331,7 @@ app.post(
 
                     "-vn",
 
-                    "-codec:a",
+                    "-c:a",
                     "pcm_s16le"
 
                 );
@@ -266,9 +339,9 @@ app.post(
             }
 
 
-            /* =========================
+            /* ==========================
                FLAC
-            ========================= */
+            ========================== */
 
             else if (format === "flac") {
 
@@ -276,7 +349,7 @@ app.post(
 
                     "-vn",
 
-                    "-codec:a",
+                    "-c:a",
                     "flac"
 
                 );
@@ -284,9 +357,9 @@ app.post(
             }
 
 
-            /* =========================
+            /* ==========================
                AAC
-            ========================= */
+            ========================== */
 
             else if (format === "aac") {
 
@@ -294,7 +367,7 @@ app.post(
 
                     "-vn",
 
-                    "-codec:a",
+                    "-c:a",
                     "aac",
 
                     "-b:a",
@@ -305,9 +378,9 @@ app.post(
             }
 
 
-            /* =========================
+            /* ==========================
                OGG
-            ========================= */
+            ========================== */
 
             else if (format === "ogg") {
 
@@ -315,7 +388,7 @@ app.post(
 
                     "-vn",
 
-                    "-codec:a",
+                    "-c:a",
                     "libvorbis",
 
                     "-b:a",
@@ -326,37 +399,40 @@ app.post(
             }
 
 
-            /* =========================
+            /* ==========================
                MP4
-            ========================= */
+            ========================== */
 
             else if (format === "mp4") {
 
                 ffmpegArgs.push(
 
-                    "-codec:v",
+                    "-c:v",
                     "libx264",
 
                     "-preset",
-                    "medium",
+                    "veryfast",
 
                     "-crf",
                     "23",
 
-                    "-codec:a",
+                    "-c:a",
                     "aac",
 
                     "-b:a",
-                    `${audioQuality}k`
+                    `${audioQuality}k`,
+
+                    "-movflags",
+                    "+faststart"
 
                 );
 
             }
 
 
-            /* =========================
-               NORMALIZE
-            ========================= */
+            /* ==========================
+               AUDIO NORMALISIEREN
+            ========================== */
 
             if (
                 req.body.normalizeAudio === "true"
@@ -372,9 +448,9 @@ app.post(
             }
 
 
-            /* =========================
-               REMOVE METADATA
-            ========================= */
+            /* ==========================
+               METADATEN ENTFERNEN
+            ========================== */
 
             if (
                 req.body.removeMetadata === "true"
@@ -390,18 +466,52 @@ app.post(
             }
 
 
+            /* ==========================
+               OUTPUT
+            ========================== */
+
             ffmpegArgs.push(
                 outputFile
             );
 
 
-            /* =========================
-               FFmpeg
-            ========================= */
-
-            await runFFmpeg(
-                ffmpegArgs
+            console.log(
+                "Starte FFmpeg:"
             );
+
+            console.log(
+                ffmpegArgs.join(" ")
+            );
+
+
+            /* ==========================
+               FFMPEG AUSFÜHREN
+            ========================== */
+
+            const ffmpegResult =
+                await runFFmpeg(
+                    ffmpegArgs
+                );
+
+
+            console.log(
+                "FFmpeg erfolgreich beendet."
+            );
+
+
+            /* ==========================
+               OUTPUT PRÜFEN
+            ========================== */
+
+            if (
+                !fs.existsSync(outputFile)
+            ) {
+
+                throw new Error(
+                    "FFmpeg wurde beendet, aber die Ausgabedatei wurde nicht erstellt."
+                );
+
+            }
 
 
             const stats =
@@ -410,14 +520,41 @@ app.post(
                 );
 
 
+            if (stats.size === 0) {
+
+                throw new Error(
+                    "Die erzeugte Datei ist leer."
+                );
+
+            }
+
+
+            /* ==========================
+               INPUT LÖSCHEN
+            ========================== */
+
             removeFile(
                 inputFile
             );
 
 
-            const downloadUrl =
-                `${getBaseUrl(req)}/downloads/${encodeURIComponent(outputName)}`;
+            /* ==========================
+               DOWNLOAD URL
+            ========================== */
 
+            const downloadUrl =
+                `${req.protocol}://${req.get("host")}/downloads/${encodeURIComponent(outputName)}`;
+
+
+            console.log(
+                "Download:",
+                downloadUrl
+            );
+
+
+            /* ==========================
+               RESPONSE
+            ========================== */
 
             return res.json({
 
@@ -439,8 +576,19 @@ app.post(
         } catch (error) {
 
             console.error(
-                "FFmpeg error:",
+                "================================"
+            );
+
+            console.error(
+                "KONVERTIERUNGSFEHLER"
+            );
+
+            console.error(
                 error
+            );
+
+            console.error(
+                "================================"
             );
 
 
@@ -453,11 +601,21 @@ app.post(
             }
 
 
+            if (outputFile) {
+
+                removeFile(
+                    outputFile
+                );
+
+            }
+
+
             return res.status(500).json({
 
                 success: false,
 
                 error:
+                    error.message ||
                     "Die Datei konnte nicht konvertiert werden."
 
             });
@@ -465,13 +623,12 @@ app.post(
         }
 
     }
-
 );
 
 
-/* =========================
-   DOWNLOAD
-========================= */
+/* ==========================================
+   DOWNLOADS
+========================================== */
 
 app.use(
     "/downloads",
@@ -481,9 +638,9 @@ app.use(
 );
 
 
-/* =========================
-   FFmpeg
-========================= */
+/* ==========================================
+   FFMPEG
+========================================== */
 
 function runFFmpeg(args) {
 
@@ -511,11 +668,27 @@ function runFFmpeg(args) {
             );
 
 
+            process.stdout.on(
+                "data",
+                data => {
+
+                    console.log(
+                        data.toString()
+                    );
+
+                }
+            );
+
+
             process.on(
                 "error",
                 error => {
 
-                    reject(error);
+                    reject(
+                        new Error(
+                            `FFmpeg konnte nicht gestartet werden: ${error.message}`
+                        )
+                    );
 
                 }
             );
@@ -527,17 +700,21 @@ function runFFmpeg(args) {
 
                     if (code === 0) {
 
-                        resolve();
+                        resolve({
+                            success: true
+                        });
 
                     } else {
 
-                        console.error(
+                        const lastError =
                             stderr
-                        );
+                                .slice(-3000)
+                                .trim();
+
 
                         reject(
                             new Error(
-                                `FFmpeg Fehler: ${code}`
+                                `FFmpeg Fehler (Code ${code}): ${lastError}`
                             )
                         );
 
@@ -552,20 +729,83 @@ function runFFmpeg(args) {
 }
 
 
-/* =========================
-   URL
-========================= */
+/* ==========================================
+   FFMPEG VERSION
+========================================== */
 
-function getBaseUrl(req) {
+function runFFmpegVersion() {
 
-    return `${req.protocol}://${req.get("host")}`;
+    return new Promise(
+        (resolve, reject) => {
+
+            const process =
+                spawn(
+                    "ffmpeg",
+                    [
+                        "-version"
+                    ]
+                );
+
+
+            let output = "";
+
+
+            process.stdout.on(
+                "data",
+                data => {
+
+                    output +=
+                        data.toString();
+
+                }
+            );
+
+
+            process.on(
+                "error",
+                error => {
+
+                    reject(
+                        error
+                    );
+
+                }
+            );
+
+
+            process.on(
+                "close",
+                code => {
+
+                    if (code === 0) {
+
+                        resolve(
+                            output
+                                .split("\n")[0]
+                        );
+
+                    } else {
+
+                        reject(
+                            new Error(
+                                "FFmpeg ist nicht verfügbar."
+                            )
+                        );
+
+                    }
+
+                }
+            );
+
+        }
+    );
 
 }
 
 
-/* =========================
-   FILE DELETE
-========================= */
+/* ==========================================
+   DATEI LÖSCHEN
+========================================== */
 
 function removeFile(file) {
 
@@ -576,7 +816,9 @@ function removeFile(file) {
             fs.existsSync(file)
         ) {
 
-            fs.unlinkSync(file);
+            fs.unlinkSync(
+                file
+            );
 
         }
 
@@ -592,9 +834,9 @@ function removeFile(file) {
 }
 
 
-/* =========================
-   FILE SIZE
-========================= */
+/* ==========================================
+   DATEIGRÖSSE
+========================================== */
 
 function formatBytes(bytes) {
 
@@ -633,9 +875,9 @@ function formatBytes(bytes) {
 }
 
 
-/* =========================
+/* ==========================================
    START
-========================= */
+========================================== */
 
 app.listen(
     PORT,
@@ -643,6 +885,10 @@ app.listen(
 
         console.log(
             `MediaForge API läuft auf Port ${PORT}`
+        );
+
+        console.log(
+            `Port: ${PORT}`
         );
 
     }
