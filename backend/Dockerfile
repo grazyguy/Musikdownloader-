@@ -1,19 +1,39 @@
 FROM node:22-bookworm
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
-COPY package*.json ./
+# System aktualisieren
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    ffmpeg \
+    python3 \
+    python3-pip \
+    curl \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# FFmpeg prüfen
+RUN which ffmpeg && ffmpeg -version
+
+# Deno installieren
+RUN curl -fsSL https://deno.land/install.sh | sh
+
+ENV DENO_INSTALL=/root/.deno
+ENV PATH="/root/.deno/bin:${PATH}"
+
+# yt-dlp installieren
+RUN pip3 install --break-system-packages --no-cache-dir -U yt-dlp
+
+# Backend installieren
+COPY backend/package.json ./
 
 RUN npm install --omit=dev
 
-COPY . .
+# Backend kopieren
+COPY backend/ ./
 
-RUN mkdir -p /app/downloads
+ENV PORT=10000
 
-EXPOSE 3000
+EXPOSE 10000
 
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
