@@ -1,751 +1,742 @@
 <!DOCTYPE html>
 <html lang="de">
-
 <head>
-
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <title>MediaForge – Music Downloader</title>
 
     <meta
         name="description"
-        content="MediaForge – Video und Audio Converter"
+        content="MediaForge Music Downloader – öffentliche Medien in MP3 oder MP4 umwandeln."
     >
 
-    <title>MediaForge – Video & Audio Converter</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-    <link
-        rel="stylesheet"
-        href="style.css"
-    >
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: Arial, Helvetica, sans-serif;
+            background:
+                linear-gradient(
+                    135deg,
+                    #080b12,
+                    #111827,
+                    #05070c
+                );
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
 
+        .container {
+            width: 100%;
+            max-width: 650px;
+        }
+
+        .card {
+            background: rgba(20, 25, 38, 0.95);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 24px;
+            padding: 35px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.45);
+        }
+
+        .logo {
+            text-align: center;
+            font-size: 42px;
+            font-weight: 800;
+            margin-bottom: 5px;
+        }
+
+        .logo span {
+            color: #7c3aed;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #aeb6c8;
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        input,
+        select {
+            width: 100%;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid #30384b;
+            background: #0d1220;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            margin-bottom: 20px;
+        }
+
+        input:focus,
+        select:focus {
+            border-color: #7c3aed;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        button {
+            width: 100%;
+            border: none;
+            border-radius: 14px;
+            padding: 17px;
+            background: #7c3aed;
+            color: white;
+            font-size: 17px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        button:hover {
+            background: #6d28d9;
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-box {
+            margin-top: 25px;
+            display: none;
+        }
+
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            color: #cbd5e1;
+        }
+
+        .progress {
+            width: 100%;
+            height: 12px;
+            background: #20283a;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            width: 0%;
+            height: 100%;
+            background: #7c3aed;
+            transition: width 0.3s;
+        }
+
+        .message {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 12px;
+            display: none;
+            line-height: 1.5;
+        }
+
+        .success {
+            background: rgba(34,197,94,0.12);
+            border: 1px solid rgba(34,197,94,0.3);
+            color: #86efac;
+        }
+
+        .error {
+            background: rgba(239,68,68,0.12);
+            border: 1px solid rgba(239,68,68,0.3);
+            color: #fca5a5;
+        }
+
+        .info {
+            background: rgba(59,130,246,0.12);
+            border: 1px solid rgba(59,130,246,0.3);
+            color: #93c5fd;
+        }
+
+        .download-button {
+            display: none;
+            margin-top: 15px;
+            text-align: center;
+            text-decoration: none;
+            background: #16a34a;
+            color: white;
+            padding: 16px;
+            border-radius: 14px;
+            font-weight: 800;
+        }
+
+        .download-button:hover {
+            background: #15803d;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 20px;
+            color: #737d91;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+
+            .card {
+                padding: 25px 20px;
+            }
+
+            .logo {
+                font-size: 34px;
+            }
+
+            .row {
+                grid-template-columns: 1fr;
+                gap: 0;
+            }
+        }
+    </style>
 </head>
-
 
 <body>
 
+<div class="container">
 
-<div class="app">
-
-
-    <!-- ==========================================
-         SIDEBAR
-    =========================================== -->
-
-    <aside class="sidebar">
-
+    <div class="card">
 
         <div class="logo">
-
-            <div class="logo-icon">
-                M
-            </div>
-
-            <div class="logo-text">
-
-                <strong>
-                    MediaForge
-                </strong>
-
-                <span>
-                    Converter
-                </span>
-
-            </div>
-
+            Media<span>Forge</span>
         </div>
 
-
-        <nav>
-
-            <button
-                class="nav-item active"
-                data-page="converter"
-                type="button"
-            >
-
-                <span class="nav-icon">
-                    ⇩
-                </span>
-
-                <span>
-                    Converter
-                </span>
-
-            </button>
-
-
-            <button
-                class="nav-item"
-                data-page="files"
-                type="button"
-            >
-
-                <span class="nav-icon">
-                    ▣
-                </span>
-
-                <span>
-                    Meine Dateien
-                </span>
-
-            </button>
-
-
-            <button
-                class="nav-item"
-                data-page="settings"
-                type="button"
-            >
-
-                <span class="nav-icon">
-                    ⚙
-                </span>
-
-                <span>
-                    Einstellungen
-                </span>
-
-            </button>
-
-        </nav>
-
-
-        <div class="sidebar-bottom">
-
-            <span class="status-dot"></span>
-
-            <span>
-                System bereit
-            </span>
-
+        <div class="subtitle">
+            Music & Media Downloader
         </div>
 
+        <label for="url">
+            Video- oder Medien-URL
+        </label>
 
-    </aside>
+        <input
+            id="url"
+            type="url"
+            placeholder="YouTube- oder TikTok-Link einfügen..."
+            autocomplete="off"
+        >
 
+        <div class="row">
 
+            <div>
+                <label for="format">
+                    Format
+                </label>
 
-    <!-- ==========================================
-         MAIN
-    =========================================== -->
+                <select id="format">
 
-    <main class="main">
+                    <option value="mp3">
+                        MP3
+                    </option>
 
+                    <option value="mp4">
+                        MP4
+                    </option>
 
-        <!-- HEADER -->
+                    <option value="m4a">
+                        M4A
+                    </option>
 
-        <header class="header">
+                    <option value="wav">
+                        WAV
+                    </option>
+
+                    <option value="flac">
+                        FLAC
+                    </option>
+
+                    <option value="aac">
+                        AAC
+                    </option>
+
+                    <option value="ogg">
+                        OGG
+                    </option>
+
+                </select>
+            </div>
 
             <div>
 
-                <h1>
-                    Video & Audio Converter
-                </h1>
-
-                <p>
-                    Videos und Audiodateien verarbeiten
-                </p>
-
-            </div>
-
-
-            <button
-                id="themeButton"
-                class="icon-button"
-                type="button"
-            >
-                ☼
-            </button>
-
-        </header>
-
-
-
-        <!-- ======================================
-             CONVERTER
-        ======================================= -->
-
-        <section
-            id="converterPage"
-            class="page active"
-        >
-
-
-            <!-- HERO -->
-
-            <div class="hero-card">
-
-                <div class="hero-icon">
-                    ⇩
-                </div>
-
-
-                <h2>
-                    Video oder Musik hinzufügen
-                </h2>
-
-
-                <p>
-                    Eigene Datei auswählen
-                </p>
-
-
-                <!-- URL -->
-
-                <div class="url-box">
-
-                    <input
-                        id="urlInput"
-                        type="url"
-                        placeholder="URL-Funktion wird später aktiviert..."
-                        autocomplete="off"
-                    >
-
-
-                    <button
-                        id="pasteButton"
-                        type="button"
-                    >
-                        Einfügen
-                    </button>
-
-                </div>
-
-
-                <!-- DIVIDER -->
-
-                <div class="divider">
-
-                    <span>
-                        ODER
-                    </span>
-
-                </div>
-
-
-                <!-- FILE UPLOAD -->
-
-                <label
-                    class="upload-box"
-                    for="fileInput"
-                >
-
-                    <input
-                        id="fileInput"
-                        type="file"
-                        accept="video/*,audio/*"
-                        hidden
-                    >
-
-
-                    <div class="upload-icon">
-                        ↑
-                    </div>
-
-
-                    <strong>
-                        Datei auswählen
-                    </strong>
-
-
-                    <span>
-                        MP4, MOV, MKV, AVI, MP3, WAV, M4A, FLAC usw.
-                    </span>
-
+                <label for="quality">
+                    Audioqualität
                 </label>
 
-            </div>
+                <select id="quality">
 
+                    <option value="128">
+                        128 kbps
+                    </option>
 
+                    <option value="192" selected>
+                        192 kbps
+                    </option>
 
-            <!-- ==================================
-                 OPTIONS
-            =================================== -->
+                    <option value="256">
+                        256 kbps
+                    </option>
 
-            <div class="options-card">
+                    <option value="320">
+                        320 kbps
+                    </option>
 
-
-                <div class="section-title">
-
-                    <h3>
-                        Konvertierungsoptionen
-                    </h3>
-
-                    <span>
-                        Ausgabe konfigurieren
-                    </span>
-
-                </div>
-
-
-
-                <div class="options-grid">
-
-
-                    <!-- FORMAT -->
-
-                    <div class="form-group">
-
-                        <label for="format">
-                            Ausgabeformat
-                        </label>
-
-
-                        <select id="format">
-
-                            <option value="mp4">
-                                MP4 – Video
-                            </option>
-
-                            <option value="mp3">
-                                MP3 – Audio
-                            </option>
-
-                            <option value="m4a">
-                                M4A – Audio
-                            </option>
-
-                            <option value="wav">
-                                WAV – Audio
-                            </option>
-
-                            <option value="flac">
-                                FLAC – Audio
-                            </option>
-
-                            <option value="aac">
-                                AAC – Audio
-                            </option>
-
-                            <option value="ogg">
-                                OGG – Audio
-                            </option>
-
-                        </select>
-
-                    </div>
-
-
-
-                    <!-- VIDEO QUALITY -->
-
-                    <div
-                        class="form-group"
-                        id="qualityGroup"
-                    >
-
-                        <label for="quality">
-                            Videoqualität
-                        </label>
-
-
-                        <select id="quality">
-
-                            <option value="best">
-                                Beste Qualität
-                            </option>
-
-                            <option value="2160">
-                                4K / 2160p
-                            </option>
-
-                            <option value="1440">
-                                1440p
-                            </option>
-
-                            <option value="1080">
-                                1080p Full HD
-                            </option>
-
-                            <option value="720">
-                                720p HD
-                            </option>
-
-                            <option value="480">
-                                480p
-                            </option>
-
-                            <option value="360">
-                                360p
-                            </option>
-
-                        </select>
-
-                    </div>
-
-
-
-                    <!-- AUDIO QUALITY -->
-
-                    <div
-                        class="form-group hidden"
-                        id="audioQualityGroup"
-                    >
-
-                        <label for="audioQuality">
-                            Audioqualität
-                        </label>
-
-
-                        <select id="audioQuality">
-
-                            <option value="320">
-                                320 kbps
-                            </option>
-
-                            <option value="256">
-                                256 kbps
-                            </option>
-
-                            <option value="192">
-                                192 kbps
-                            </option>
-
-                            <option value="128">
-                                128 kbps
-                            </option>
-
-                        </select>
-
-                    </div>
-
-
-
-                    <!-- DATEINAME -->
-
-                    <div class="form-group">
-
-                        <label for="outputName">
-                            Dateiname
-                        </label>
-
-
-                        <input
-                            id="outputName"
-                            type="text"
-                            placeholder="Meine Datei"
-                            autocomplete="off"
-                        >
-
-                    </div>
-
-                </div>
-
-
-
-                <!-- EXTRA OPTIONS -->
-
-                <div class="extra-options">
-
-
-                    <label class="checkbox">
-
-                        <input
-                            type="checkbox"
-                            id="extractAudio"
-                        >
-
-                        <span></span>
-
-                        Nur Audio extrahieren
-
-                    </label>
-
-
-
-                    <label class="checkbox">
-
-                        <input
-                            type="checkbox"
-                            id="normalizeAudio"
-                        >
-
-                        <span></span>
-
-                        Audio normalisieren
-
-                    </label>
-
-
-
-                    <label class="checkbox">
-
-                        <input
-                            type="checkbox"
-                            id="removeMetadata"
-                        >
-
-                        <span></span>
-
-                        Metadaten entfernen
-
-                    </label>
-
-                </div>
-
-
-
-                <!-- START -->
-
-                <button
-                    id="convertButton"
-                    class="convert-button"
-                    type="button"
-                >
-
-                    <span>
-                        ⇩
-                    </span>
-
-                    Konvertierung starten
-
-                </button>
+                </select>
 
             </div>
 
+        </div>
 
+        <label for="filename">
+            Dateiname
+        </label>
 
-            <!-- ==================================
-                 PROGRESS
-            =================================== -->
-
-            <div
-                id="progressCard"
-                class="progress-card hidden"
-            >
-
-                <div class="progress-header">
-
-                    <div>
-
-                        <strong id="progressTitle">
-                            Verarbeitung...
-                        </strong>
-
-                        <span id="progressStatus">
-                            Vorbereitung
-                        </span>
-
-                    </div>
-
-
-                    <strong id="progressPercent">
-                        0%
-                    </strong>
-
-                </div>
-
-
-                <div class="progress-bar">
-
-                    <div
-                        id="progressFill"
-                        class="progress-fill"
-                    ></div>
-
-                </div>
-
-
-                <div class="progress-info">
-
-                    <span id="progressSpeed">
-                        —
-                    </span>
-
-                    <span id="progressEta">
-                        —
-                    </span>
-
-                </div>
-
-            </div>
-
-
-
-            <!-- ==================================
-                 RESULT
-            =================================== -->
-
-            <div
-                id="resultCard"
-                class="result-card hidden"
-            >
-
-                <div class="result-icon">
-                    ✓
-                </div>
-
-
-                <div class="result-info">
-
-                    <strong id="resultName">
-                        Datei fertig
-                    </strong>
-
-                    <span id="resultSize">
-                        —
-                    </span>
-
-                </div>
-
-
-                <a
-                    id="downloadButton"
-                    class="download-button"
-                    href="#"
-                    download
-                >
-                    Herunterladen
-                </a>
-
-            </div>
-
-
-        </section>
-
-
-
-        <!-- ======================================
-             FILES
-        ======================================= -->
-
-        <section
-            id="filesPage"
-            class="page"
+        <input
+            id="filename"
+            type="text"
+            placeholder="mediaforge-download"
+            value="mediaforge-download"
         >
 
-            <div class="page-card">
+        <button
+            id="downloadBtn"
+            onclick="startDownload()"
+        >
+            ⬇️ Download starten
+        </button>
 
-                <h2>
-                    Meine Dateien
-                </h2>
+        <div
+            id="progressBox"
+            class="progress-box"
+        >
 
+            <div class="progress-text">
 
-                <p>
-                    Deine zuletzt konvertierten Dateien.
-                </p>
+                <span id="progressStatus">
+                    Download wird vorbereitet...
+                </span>
 
+                <span id="progressPercent">
+                    0%
+                </span>
+
+            </div>
+
+            <div class="progress">
 
                 <div
-                    id="fileList"
-                    class="file-list"
-                >
-
-                    <div class="empty-state">
-                        Noch keine Dateien vorhanden.
-                    </div>
-
-                </div>
+                    id="progressBar"
+                    class="progress-bar"
+                ></div>
 
             </div>
 
-        </section>
+        </div>
 
+        <div
+            id="message"
+            class="message"
+        ></div>
 
-
-        <!-- ======================================
-             SETTINGS
-        ======================================= -->
-
-        <section
-            id="settingsPage"
-            class="page"
+        <a
+            id="downloadLink"
+            class="download-button"
+            target="_blank"
+            rel="noopener"
         >
+            ⬇️ Datei herunterladen
+        </a>
 
-            <div class="page-card">
+    </div>
 
-                <h2>
-                    Einstellungen
-                </h2>
-
-
-                <div class="setting-row">
-
-                    <div>
-
-                        <strong>
-                            Automatischer Download
-                        </strong>
-
-                        <p>
-                            Fertige Dateien automatisch herunterladen.
-                        </p>
-
-                    </div>
-
-
-                    <input
-                        type="checkbox"
-                        id="autoDownload"
-                    >
-
-                </div>
-
-
-                <div class="setting-row">
-
-                    <div>
-
-                        <strong>
-                            Benachrichtigungen
-                        </strong>
-
-                        <p>
-                            Meldung anzeigen, wenn eine Konvertierung fertig ist.
-                        </p>
-
-                    </div>
-
-
-                    <input
-                        type="checkbox"
-                        id="notifications"
-                        checked
-                    >
-
-                </div>
-
-            </div>
-
-        </section>
-
-
-    </main>
-
+    <div class="footer">
+        MediaForge © 2026
+    </div>
 
 </div>
 
 
+<script>
 
-<!-- ==========================================
-     TOAST
-========================================== -->
+/* =========================================================
+   DEIN NEUES BACKEND
+========================================================= */
 
-<div
-    id="toast"
-    class="toast"
->
-
-    <span id="toastMessage"></span>
-
-</div>
+const API_URL =
+    "https://musicdownloader-api-2.onrender.com";
 
 
+/* =========================================================
+   ELEMENTE
+========================================================= */
 
-<!-- ==========================================
-     JAVASCRIPT
-     
-     WICHTIG:
-     Deine Datei heißt app.js
-========================================== -->
+const urlInput =
+    document.getElementById("url");
 
-<script src="app.js"></script>
+const formatInput =
+    document.getElementById("format");
 
+const qualityInput =
+    document.getElementById("quality");
+
+const filenameInput =
+    document.getElementById("filename");
+
+const downloadBtn =
+    document.getElementById("downloadBtn");
+
+const progressBox =
+    document.getElementById("progressBox");
+
+const progressBar =
+    document.getElementById("progressBar");
+
+const progressPercent =
+    document.getElementById("progressPercent");
+
+const progressStatus =
+    document.getElementById("progressStatus");
+
+const message =
+    document.getElementById("message");
+
+const downloadLink =
+    document.getElementById("downloadLink");
+
+
+/* =========================================================
+   MESSAGE
+========================================================= */
+
+function showMessage(
+    text,
+    type
+) {
+
+    message.textContent = text;
+
+    message.className =
+        "message " + type;
+
+    message.style.display =
+        "block";
+}
+
+
+/* =========================================================
+   PROGRESS
+========================================================= */
+
+function setProgress(
+    percent,
+    status
+) {
+
+    progressBox.style.display =
+        "block";
+
+    progressBar.style.width =
+        percent + "%";
+
+    progressPercent.textContent =
+        percent + "%";
+
+    progressStatus.textContent =
+        status;
+}
+
+
+/* =========================================================
+   DOWNLOAD
+========================================================= */
+
+async function startDownload() {
+
+    const url =
+        urlInput.value.trim();
+
+    const format =
+        formatInput.value;
+
+    const quality =
+        qualityInput.value;
+
+    const filename =
+        filenameInput.value.trim() ||
+        "mediaforge-download";
+
+
+    /* -----------------------------------------------------
+       URL PRÜFEN
+    ----------------------------------------------------- */
+
+    if (!url) {
+
+        showMessage(
+            "Bitte zuerst eine URL einfügen.",
+            "error"
+        );
+
+        return;
+    }
+
+
+    /* -----------------------------------------------------
+       RESET
+    ----------------------------------------------------- */
+
+    message.style.display =
+        "none";
+
+    downloadLink.style.display =
+        "none";
+
+    downloadBtn.disabled =
+        true;
+
+
+    setProgress(
+        5,
+        "Verbindung zum Server..."
+    );
+
+
+    try {
+
+        /* -------------------------------------------------
+           SERVER TEST
+        ------------------------------------------------- */
+
+        const statusResponse =
+            await fetch(
+                API_URL + "/api/status"
+            );
+
+        if (!statusResponse.ok) {
+
+            throw new Error(
+                "Der MediaForge Server antwortet nicht."
+            );
+        }
+
+        const status =
+            await statusResponse.json();
+
+
+        if (!status.ytDlp) {
+
+            throw new Error(
+                "yt-dlp ist auf dem Server nicht verfügbar."
+            );
+        }
+
+
+        if (!status.ffmpeg) {
+
+            throw new Error(
+                "FFmpeg ist auf dem Server nicht verfügbar."
+            );
+        }
+
+
+        setProgress(
+            10,
+            "Server bereit. Download wird gestartet..."
+        );
+
+
+        /* -------------------------------------------------
+           FORM DATA
+        ------------------------------------------------- */
+
+        const formData =
+            new FormData();
+
+        formData.append(
+            "url",
+            url
+        );
+
+        formData.append(
+            "format",
+            format
+        );
+
+        formData.append(
+            "audioQuality",
+            quality
+        );
+
+        formData.append(
+            "filename",
+            filename
+        );
+
+        formData.append(
+            "normalizeAudio",
+            "false"
+        );
+
+        formData.append(
+            "removeMetadata",
+            "false"
+        );
+
+
+        /* -------------------------------------------------
+           DOWNLOAD
+        ------------------------------------------------- */
+
+        setProgress(
+            15,
+            "Medienquelle wird verarbeitet..."
+        );
+
+
+        const response =
+            await fetch(
+                API_URL + "/api/convert",
+                {
+                    method: "POST",
+                    body: formData
+                }
+            );
+
+
+        setProgress(
+            70,
+            "Datei wird verarbeitet..."
+        );
+
+
+        let data;
+
+        try {
+
+            data =
+                await response.json();
+
+        } catch {
+
+            throw new Error(
+                "Der Server hat keine gültige Antwort zurückgegeben."
+            );
+        }
+
+
+        /* -------------------------------------------------
+           SERVER FEHLER
+        ------------------------------------------------- */
+
+        if (
+            !response.ok ||
+            !data.success
+        ) {
+
+            throw new Error(
+                data.error ||
+                "Der Download ist fehlgeschlagen."
+            );
+        }
+
+
+        /* -------------------------------------------------
+           ERFOLG
+        ------------------------------------------------- */
+
+        setProgress(
+            100,
+            "Download fertig!"
+        );
+
+
+        showMessage(
+            `Fertig! Datei: ${data.filename} (${data.size})`,
+            "success"
+        );
+
+
+        downloadLink.href =
+            data.downloadUrl;
+
+        downloadLink.download =
+            data.filename;
+
+        downloadLink.style.display =
+            "block";
+
+
+    } catch (error) {
+
+        console.error(
+            "MediaForge Fehler:",
+            error
+        );
+
+
+        setProgress(
+            0,
+            "Download fehlgeschlagen"
+        );
+
+
+        showMessage(
+            error.message ||
+            "Unbekannter Fehler.",
+            "error"
+        );
+
+
+    } finally {
+
+        downloadBtn.disabled =
+            false;
+
+    }
+
+}
+
+
+/* =========================================================
+   ENTER
+========================================================= */
+
+urlInput.addEventListener(
+    "keydown",
+    event => {
+
+        if (
+            event.key === "Enter"
+        ) {
+
+            startDownload();
+
+        }
+
+    }
+);
+
+</script>
 
 </body>
-
 </html>
