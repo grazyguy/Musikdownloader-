@@ -16,10 +16,6 @@ const TEMP_DIR = path.resolve("temp");
 fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 fs.mkdirSync(TEMP_DIR, { recursive: true });
 
-/* =========================================================
-   CORS
-========================================================= */
-
 app.use(
     cors({
         origin: true,
@@ -31,7 +27,7 @@ app.use(
 app.use(express.json());
 
 /* =========================================================
-   FILE UPLOAD
+   UPLOAD
 ========================================================= */
 
 const storage = multer.diskStorage({
@@ -56,83 +52,51 @@ const upload = multer({
 });
 
 /* =========================================================
-   HEALTH CHECK
+   HOME
 ========================================================= */
 
 app.get("/", async (req, res) => {
-
-    const ytDlpAvailable =
-        await commandAvailable("yt-dlp");
-
-    const ffmpegAvailable =
-        await commandAvailable("ffmpeg");
-
-    const denoAvailable =
-        await commandAvailable("deno");
 
     res.json({
         success: true,
         service: "MediaForge API",
         status: "online",
 
-        ytDlp:
-            ytDlpAvailable
-                ? "available"
-                : "missing",
+        ytDlp: await commandAvailable("yt-dlp"),
 
-        ffmpeg:
-            ffmpegAvailable
-                ? "available"
-                : "missing",
+        ffmpeg: await commandAvailable("ffmpeg"),
 
-        deno:
-            denoAvailable
-                ? "available"
-                : "missing"
+        deno: await commandAvailable("deno")
     });
 });
 
 /* =========================================================
-   API STATUS
+   STATUS
 ========================================================= */
 
 app.get("/api/status", async (req, res) => {
 
-    const ytDlpAvailable =
-        await commandAvailable("yt-dlp");
-
-    const ffmpegAvailable =
-        await commandAvailable("ffmpeg");
-
-    const denoAvailable =
-        await commandAvailable("deno");
-
     res.json({
         success: true,
+
         status: "online",
 
-        ytDlp: ytDlpAvailable,
+        ytDlp:
+            await commandAvailable("yt-dlp"),
 
-        ffmpeg: ffmpegAvailable,
+        ffmpeg:
+            await commandAvailable("ffmpeg"),
 
-        deno: denoAvailable
+        deno:
+            await commandAvailable("deno")
     });
 });
 
 /* =========================================================
-   TOOL DIAGNOSE
+   TOOLS
 ========================================================= */
 
 app.get("/api/tools", async (req, res) => {
-
-    const ytDlp =
-        await commandDetails("yt-dlp");
-
-    const ffmpeg =
-        await commandDetails("ffmpeg");
-
-    const deno =
-        await commandDetails("deno");
 
     res.json({
 
@@ -141,13 +105,13 @@ app.get("/api/tools", async (req, res) => {
         tools: {
 
             "yt-dlp":
-                ytDlp,
+                await commandDetails("yt-dlp"),
 
             "ffmpeg":
-                ffmpeg,
+                await commandDetails("ffmpeg"),
 
             "deno":
-                deno
+                await commandDetails("deno")
 
         }
 
@@ -270,7 +234,7 @@ app.post(
                         success: false,
 
                         error:
-                            "Diese Plattform wird nicht unterstützt. Unterstützt werden YouTube, TikTok und Instagram."
+                            "Diese Plattform wird nicht unterstützt."
 
                     });
                 }
@@ -280,7 +244,7 @@ app.post(
                 );
 
                 console.log(
-                    "URL Download gestartet:"
+                    "URL DOWNLOAD"
                 );
 
                 console.log(url);
@@ -310,15 +274,21 @@ app.post(
                         `${tempId}.%(ext)s`
                     );
 
-                /* =================================================
-                   YT-DLP
-                ================================================= */
+                /*
+                 * WICHTIG:
+                 *
+                 * Wir laden zunächst das beste
+                 * verfügbare Format herunter.
+                 *
+                 * Danach übernimmt FFmpeg
+                 * die Konvertierung.
+                 */
 
                 const ytDlpArgs = [
 
                     "--no-playlist",
 
-                    "--verbose",
+                    "--no-warnings",
 
                     "--restrict-filenames",
 
@@ -333,6 +303,18 @@ app.post(
                     "--merge-output-format",
                     "mp4",
 
+                    "--retries",
+                    "5",
+
+                    "--fragment-retries",
+                    "5",
+
+                    "--retry-sleep",
+                    "2",
+
+                    "--socket-timeout",
+                    "30",
+
                     "-o",
                     template,
 
@@ -341,32 +323,26 @@ app.post(
                 ];
 
                 console.log(
-                    "yt-dlp startet:"
+                    "yt-dlp startet..."
                 );
 
-                console.log(
-                    ytDlpArgs.join(" ")
-                );
-
-                const ytDlpResult =
+                const result =
                     await runCommand(
                         "yt-dlp",
                         ytDlpArgs
                     );
 
                 console.log(
-                    "yt-dlp erfolgreich beendet."
+                    "yt-dlp beendet."
                 );
 
-                if (
-                    ytDlpResult.stderr
-                ) {
+                console.log(
+                    result.stdout
+                );
 
-                    console.log(
-                        "yt-dlp Ausgabe:",
-                        ytDlpResult.stderr
-                    );
-                }
+                console.log(
+                    result.stderr
+                );
 
                 const files =
                     fs.readdirSync(
@@ -384,7 +360,7 @@ app.post(
                 if (!downloaded) {
 
                     throw new Error(
-                        "yt-dlp wurde ausgeführt, aber es wurde keine Ausgabedatei gefunden."
+                        "yt-dlp hat keine Datei erzeugt."
                     );
                 }
 
@@ -393,10 +369,15 @@ app.post(
                         TEMP_DIR,
                         downloaded
                     );
+
+                console.log(
+                    "Download gefunden:",
+                    inputFile
+                );
             }
 
             /* =================================================
-               LOKALE DATEI
+               DATEI-UPLOAD
             ================================================= */
 
             else {
@@ -408,7 +389,7 @@ app.post(
                         success: false,
 
                         error:
-                            "Bitte eine URL oder eine Datei auswählen."
+                            "Bitte eine URL oder Datei auswählen."
 
                     });
                 }
@@ -441,7 +422,7 @@ app.post(
             if (!ffmpegAvailable) {
 
                 throw new Error(
-                    "FFmpeg ist auf dem Server nicht verfügbar."
+                    "FFmpeg ist nicht verfügbar."
                 );
             }
 
@@ -612,7 +593,7 @@ app.post(
             }
 
             /* =================================================
-               NORMALISIEREN
+               NORMALIZE
             ================================================= */
 
             if (
@@ -648,11 +629,7 @@ app.post(
             );
 
             console.log(
-                "FFmpeg startet:"
-            );
-
-            console.log(
-                ffmpegArgs.join(" ")
+                "FFmpeg startet..."
             );
 
             await runCommand(
@@ -682,14 +659,11 @@ app.post(
                INPUT LÖSCHEN
             ================================================= */
 
-            if (inputFile) {
+            removeFile(
+                inputFile
+            );
 
-                removeFile(
-                    inputFile
-                );
-
-                inputFile = null;
-            }
+            inputFile = null;
 
             /* =================================================
                DOWNLOAD URL
@@ -697,20 +671,6 @@ app.post(
 
             const downloadUrl =
                 `${getBaseUrl(req)}/downloads/${encodeURIComponent(outputName)}`;
-
-            console.log(
-                "======================================"
-            );
-
-            console.log(
-                "Konvertierung erfolgreich:"
-            );
-
-            console.log(outputName);
-
-            console.log(
-                "======================================"
-            );
 
             return res.json({
 
@@ -731,17 +691,8 @@ app.post(
         } catch (error) {
 
             console.error(
-                "======================================"
-            );
-
-            console.error(
-                "MEDIAFORGE FEHLER"
-            );
-
-            console.error(error);
-
-            console.error(
-                "======================================"
+                "MEDIAFORGE FEHLER:",
+                error
             );
 
             if (inputFile) {
@@ -787,7 +738,7 @@ app.use(
 );
 
 /* =========================================================
-   URL PRÜFUNG
+   URL
 ========================================================= */
 
 function isHttpUrl(value) {
@@ -798,22 +749,18 @@ function isHttpUrl(value) {
             new URL(value);
 
         return (
-
             parsed.protocol === "http:" ||
-
             parsed.protocol === "https:"
-
         );
 
     } catch {
 
         return false;
-
     }
 }
 
 /* =========================================================
-   PLATTFORM PRÜFUNG
+   PLATTFORM
 ========================================================= */
 
 function isSupportedPlatform(value) {
@@ -850,12 +797,11 @@ function isSupportedPlatform(value) {
     } catch {
 
         return false;
-
     }
 }
 
 /* =========================================================
-   COMMAND AUSFÜHREN
+   COMMAND
 ========================================================= */
 
 function runCommand(
@@ -864,12 +810,7 @@ function runCommand(
 ) {
 
     return new Promise(
-
         (resolve, reject) => {
-
-            console.log(
-                `Starte ${command}...`
-            );
 
             const child =
                 spawn(
@@ -896,7 +837,6 @@ function runCommand(
                         `[${command}]`,
                         text.trim()
                     );
-
                 }
             );
 
@@ -913,7 +853,6 @@ function runCommand(
                         `[${command}]`,
                         text.trim()
                     );
-
                 }
             );
 
@@ -921,23 +860,13 @@ function runCommand(
                 "error",
                 error => {
 
-                    console.error(
-                        `${command} Startfehler:`,
-                        error
-                    );
-
                     reject(error);
-
                 }
             );
 
             child.on(
                 "close",
                 code => {
-
-                    console.log(
-                        `${command} beendet mit Code ${code}`
-                    );
 
                     if (code === 0) {
 
@@ -959,17 +888,14 @@ function runCommand(
 
                             new Error(
 
-                                `${command} wurde mit Code ${code} beendet.\n${details}`
+                                `${command} wurde mit Code ${code} beendet. ${details}`
 
                             )
 
                         );
-
                     }
-
                 }
             );
-
         }
     );
 }
@@ -983,7 +909,6 @@ function commandAvailable(
 ) {
 
     return new Promise(
-
         resolve => {
 
             const child =
@@ -994,6 +919,28 @@ function commandAvailable(
                         env: process.env
                     }
                 );
+
+            let output = "";
+
+            child.stdout.on(
+                "data",
+                data => {
+
+                    output +=
+                        data.toString();
+
+                }
+            );
+
+            child.stderr.on(
+                "data",
+                data => {
+
+                    output +=
+                        data.toString();
+
+                }
+            );
 
             child.on(
                 "error",
@@ -1008,13 +955,34 @@ function commandAvailable(
                 "close",
                 code => {
 
-                    resolve(
-                        code === 0
-                    );
+                    /*
+                     * FFmpeg kann auf diesem Container
+                     * Versioninformationen ausgeben,
+                     * obwohl der Prozess einen anderen
+                     * Exit-Code zurückgibt.
+                     *
+                     * Deshalb prüfen wir auch den Text.
+                     */
 
+                    if (
+                        output
+                            .toLowerCase()
+                            .includes(
+                                command.toLowerCase()
+                            )
+                    ) {
+
+                        resolve(true);
+
+                    } else {
+
+                        resolve(
+                            code === 0
+                        );
+
+                    }
                 }
             );
-
         }
     );
 }
@@ -1028,7 +996,6 @@ function commandDetails(
 ) {
 
     return new Promise(
-
         resolve => {
 
             const child =
@@ -1071,6 +1038,10 @@ function commandDetails(
 
                         available: false,
 
+                        exitCode: null,
+
+                        output: "",
+
                         error:
                             error.message
 
@@ -1083,34 +1054,40 @@ function commandDetails(
                 "close",
                 code => {
 
+                    const output =
+                        (
+                            stdout ||
+                            stderr
+                        ).slice(
+                            0,
+                            2000
+                        );
+
                     resolve({
 
                         available:
+                            output
+                                .toLowerCase()
+                                .includes(
+                                    command.toLowerCase()
+                                ) ||
                             code === 0,
 
                         exitCode:
                             code,
 
-                        output:
-                            (
-                                stdout ||
-                                stderr
-                            ).slice(
-                                0,
-                                1000
-                            )
+                        output
 
                     });
 
                 }
             );
-
         }
     );
 }
 
 /* =========================================================
-   COMMAND FEHLER
+   FEHLER
 ========================================================= */
 
 function getCommandError(
@@ -1122,22 +1099,17 @@ function getCommandError(
         return (
             "Keine detaillierte Fehlermeldung verfügbar."
         );
-
     }
 
-    const lines =
-        stderr
-            .split("\n")
-            .map(
-                line =>
-                    line.trim()
-            )
-            .filter(Boolean);
-
-    return lines
+    return stderr
+        .split("\n")
+        .map(
+            line =>
+                line.trim()
+        )
+        .filter(Boolean)
         .slice(-15)
         .join(" ");
-
 }
 
 /* =========================================================
@@ -1155,11 +1127,13 @@ function getBaseUrl(
         forwardedProto ||
         req.protocol;
 
-    return `${protocol}://${req.get("host")}`;
+    return (
+        `${protocol}://${req.get("host")}`
+    );
 }
 
 /* =========================================================
-   DATEI LÖSCHEN
+   DELETE
 ========================================================= */
 
 function removeFile(
@@ -1169,15 +1143,11 @@ function removeFile(
     try {
 
         if (
-
             file &&
-
             fs.existsSync(file)
-
         ) {
 
             fs.unlinkSync(file);
-
         }
 
     } catch (error) {
@@ -1186,12 +1156,11 @@ function removeFile(
             "Datei konnte nicht gelöscht werden:",
             error
         );
-
     }
 }
 
 /* =========================================================
-   DATEIGRÖSSE
+   SIZE
 ========================================================= */
 
 function formatBytes(
@@ -1201,46 +1170,35 @@ function formatBytes(
     if (!bytes) {
 
         return "0 Bytes";
-
     }
 
     const units = [
-
         "Bytes",
         "KB",
         "MB",
         "GB"
-
     ];
 
     const index =
         Math.min(
-
             Math.floor(
-
                 Math.log(bytes) /
                 Math.log(1024)
-
             ),
-
             units.length - 1
-
         );
 
     return `${(
-
         bytes /
         Math.pow(
             1024,
             index
         )
-
     ).toFixed(2)} ${units[index]}`;
-
 }
 
 /* =========================================================
-   FEHLER
+   FRIENDLY ERROR
 ========================================================= */
 
 function getFriendlyError(
@@ -1249,10 +1207,8 @@ function getFriendlyError(
 
     const message =
         String(
-
             error?.message ||
             error
-
         );
 
     console.error(
@@ -1261,14 +1217,11 @@ function getFriendlyError(
     );
 
     return (
-
         message.slice(
             0,
             2000
         ) ||
-
         "Unbekannter Serverfehler."
-
     );
 }
 
