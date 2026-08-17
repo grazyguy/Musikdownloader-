@@ -59,18 +59,7 @@ const upload = multer({
    HEALTH CHECK
 ========================================================= */
 
-app.get("/api/tools", async (req, res) => {
-    const results = {};
-
-    for (const command of ["yt-dlp", "ffmpeg", "deno"]) {
-        results[command] = await commandDetails(command);
-    }
-
-    res.json({
-        success: true,
-        tools: results
-    });
-});
+app.get("/", async (req, res) => {
 
     const ytDlpAvailable =
         await commandAvailable("yt-dlp");
@@ -122,44 +111,45 @@ app.get("/api/status", async (req, res) => {
         success: true,
         status: "online",
 
-        ytDlp:
-            ytDlpAvailable,
+        ytDlp: ytDlpAvailable,
 
-        ffmpeg:
-            ffmpegAvailable,
+        ffmpeg: ffmpegAvailable,
 
-        deno:
-            denoAvailable
+        deno: denoAvailable
     });
 });
 
 /* =========================================================
-   TOOL TEST
+   TOOL DIAGNOSE
 ========================================================= */
 
 app.get("/api/tools", async (req, res) => {
 
-    const ytDlpAvailable =
-        await commandAvailable("yt-dlp");
+    const ytDlp =
+        await commandDetails("yt-dlp");
 
-    const ffmpegAvailable =
-        await commandAvailable("ffmpeg");
+    const ffmpeg =
+        await commandDetails("ffmpeg");
 
-    const denoAvailable =
-        await commandAvailable("deno");
+    const deno =
+        await commandDetails("deno");
 
     res.json({
 
         success: true,
 
-        ytDlp:
-            ytDlpAvailable,
+        tools: {
 
-        ffmpeg:
-            ffmpegAvailable,
+            "yt-dlp":
+                ytDlp,
 
-        deno:
-            denoAvailable
+            "ffmpeg":
+                ffmpeg,
+
+            "deno":
+                deno
+
+        }
 
     });
 });
@@ -638,7 +628,7 @@ app.post(
             }
 
             /* =================================================
-               METADATEN ENTFERNEN
+               METADATEN
             ================================================= */
 
             if (
@@ -1004,39 +994,7 @@ function commandAvailable(
                         env: process.env
                     }
                 );
-function commandDetails(command) {
-    return new Promise((resolve) => {
-        const child = spawn(command, ["--version"], {
-            env: process.env
-        });
 
-        let stdout = "";
-        let stderr = "";
-
-        child.stdout.on("data", (data) => {
-            stdout += data.toString();
-        });
-
-        child.stderr.on("data", (data) => {
-            stderr += data.toString();
-        });
-
-        child.on("error", (error) => {
-            resolve({
-                available: false,
-                error: error.message
-            });
-        });
-
-        child.on("close", (code) => {
-            resolve({
-                available: code === 0,
-                exitCode: code,
-                output: (stdout || stderr).slice(0, 1000)
-            });
-        });
-    });
-}
             child.on(
                 "error",
                 () => {
@@ -1053,6 +1011,96 @@ function commandDetails(command) {
                     resolve(
                         code === 0
                     );
+
+                }
+            );
+
+        }
+    );
+}
+
+/* =========================================================
+   COMMAND DIAGNOSE
+========================================================= */
+
+function commandDetails(
+    command
+) {
+
+    return new Promise(
+
+        resolve => {
+
+            const child =
+                spawn(
+                    command,
+                    ["--version"],
+                    {
+                        env: process.env
+                    }
+                );
+
+            let stdout = "";
+            let stderr = "";
+
+            child.stdout.on(
+                "data",
+                data => {
+
+                    stdout +=
+                        data.toString();
+
+                }
+            );
+
+            child.stderr.on(
+                "data",
+                data => {
+
+                    stderr +=
+                        data.toString();
+
+                }
+            );
+
+            child.on(
+                "error",
+                error => {
+
+                    resolve({
+
+                        available: false,
+
+                        error:
+                            error.message
+
+                    });
+
+                }
+            );
+
+            child.on(
+                "close",
+                code => {
+
+                    resolve({
+
+                        available:
+                            code === 0,
+
+                        exitCode:
+                            code,
+
+                        output:
+                            (
+                                stdout ||
+                                stderr
+                            ).slice(
+                                0,
+                                1000
+                            )
+
+                    });
 
                 }
             );
@@ -1212,11 +1260,16 @@ function getFriendlyError(
         message
     );
 
-    return message.slice(
-        0,
-        2000
-    ) || "Unbekannter Serverfehler.";
+    return (
 
+        message.slice(
+            0,
+            2000
+        ) ||
+
+        "Unbekannter Serverfehler."
+
+    );
 }
 
 /* =========================================================
