@@ -59,7 +59,18 @@ const upload = multer({
    HEALTH CHECK
 ========================================================= */
 
-app.get("/", async (req, res) => {
+app.get("/api/tools", async (req, res) => {
+    const results = {};
+
+    for (const command of ["yt-dlp", "ffmpeg", "deno"]) {
+        results[command] = await commandDetails(command);
+    }
+
+    res.json({
+        success: true,
+        tools: results
+    });
+});
 
     const ytDlpAvailable =
         await commandAvailable("yt-dlp");
