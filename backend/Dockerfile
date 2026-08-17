@@ -19,7 +19,7 @@ RUN which ffmpeg && ffmpeg -version
 RUN curl -fsSL https://deno.land/install.sh | sh
 
 ENV DENO_INSTALL=/root/.deno
-ENV PATH="/root/.deno/bin:${PATH}"
+ENV PATH="/usr/bin:/usr/local/bin:/root/.deno/bin:${PATH}"
 
 # yt-dlp installieren
 RUN pip3 install --break-system-packages --no-cache-dir -U yt-dlp
