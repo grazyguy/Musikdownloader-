@@ -61,15 +61,34 @@ const upload = multer({
 
 app.get("/", async (req, res) => {
 
-    const ytDlpAvailable = await commandAvailable("yt-dlp");
-    const ffmpegAvailable = await commandAvailable("ffmpeg");
+    const ytDlpAvailable =
+        await commandAvailable("yt-dlp");
+
+    const ffmpegAvailable =
+        await commandAvailable("ffmpeg");
+
+    const denoAvailable =
+        await commandAvailable("deno");
 
     res.json({
         success: true,
         service: "MediaForge API",
         status: "online",
-        ytDlp: ytDlpAvailable ? "available" : "missing",
-        ffmpeg: ffmpegAvailable ? "available" : "missing"
+
+        ytDlp:
+            ytDlpAvailable
+                ? "available"
+                : "missing",
+
+        ffmpeg:
+            ffmpegAvailable
+                ? "available"
+                : "missing",
+
+        deno:
+            denoAvailable
+                ? "available"
+                : "missing"
     });
 });
 
@@ -79,14 +98,58 @@ app.get("/", async (req, res) => {
 
 app.get("/api/status", async (req, res) => {
 
-    const ytDlpAvailable = await commandAvailable("yt-dlp");
-    const ffmpegAvailable = await commandAvailable("ffmpeg");
+    const ytDlpAvailable =
+        await commandAvailable("yt-dlp");
+
+    const ffmpegAvailable =
+        await commandAvailable("ffmpeg");
+
+    const denoAvailable =
+        await commandAvailable("deno");
 
     res.json({
         success: true,
         status: "online",
-        ytDlp: ytDlpAvailable,
-        ffmpeg: ffmpegAvailable
+
+        ytDlp:
+            ytDlpAvailable,
+
+        ffmpeg:
+            ffmpegAvailable,
+
+        deno:
+            denoAvailable
+    });
+});
+
+/* =========================================================
+   TOOL TEST
+========================================================= */
+
+app.get("/api/tools", async (req, res) => {
+
+    const ytDlpAvailable =
+        await commandAvailable("yt-dlp");
+
+    const ffmpegAvailable =
+        await commandAvailable("ffmpeg");
+
+    const denoAvailable =
+        await commandAvailable("deno");
+
+    res.json({
+
+        success: true,
+
+        ytDlp:
+            ytDlpAvailable,
+
+        ffmpeg:
+            ffmpegAvailable,
+
+        deno:
+            denoAvailable
+
     });
 });
 
@@ -104,13 +167,15 @@ app.post(
 
         try {
 
-            const url = String(
-                req.body.url || ""
-            ).trim();
+            const url =
+                String(
+                    req.body.url || ""
+                ).trim();
 
-            const format = String(
-                req.body.format || "mp4"
-            ).toLowerCase();
+            const format =
+                String(
+                    req.body.format || "mp4"
+                ).toLowerCase();
 
             const allowedFormats = [
                 "mp4",
@@ -122,12 +187,17 @@ app.post(
                 "ogg"
             ];
 
-            if (!allowedFormats.includes(format)) {
+            if (
+                !allowedFormats.includes(format)
+            ) {
 
                 return res.status(400).json({
+
                     success: false,
+
                     error:
                         "Dieses Ausgabeformat wird nicht unterstützt."
+
                 });
             }
 
@@ -135,10 +205,11 @@ app.post(
                DATEINAME
             ================================================= */
 
-            const requestedName = String(
-                req.body.filename ||
-                "mediaforge-download"
-            );
+            const requestedName =
+                String(
+                    req.body.filename ||
+                    "mediaforge-download"
+                );
 
             const safeName =
                 requestedName
@@ -154,9 +225,10 @@ app.post(
                AUDIO QUALITÄT
             ================================================= */
 
-            const audioQuality = String(
-                req.body.audioQuality || "192"
-            );
+            const audioQuality =
+                String(
+                    req.body.audioQuality || "192"
+                );
 
             const allowedAudioQualities = [
                 "128",
@@ -181,17 +253,24 @@ app.post(
                 if (!isHttpUrl(url)) {
 
                     return res.status(400).json({
+
                         success: false,
-                        error: "Ungültige URL."
+
+                        error:
+                            "Ungültige URL."
+
                     });
                 }
 
                 if (!isSupportedPlatform(url)) {
 
                     return res.status(400).json({
+
                         success: false,
+
                         error:
                             "Diese Plattform wird nicht unterstützt. Unterstützt werden YouTube, TikTok und Instagram."
+
                     });
                 }
 
@@ -230,38 +309,48 @@ app.post(
                         `${tempId}.%(ext)s`
                     );
 
-                /*
-                 * yt-dlp
-                 *
-                 * Es werden keine Login-Daten
-                 * oder Cookies verwendet.
-                 *
-                 * Nur öffentlich erreichbare Inhalte.
-                 */
+                /* =================================================
+                   YT-DLP
+                ================================================= */
+
+                const ytDlpArgs = [
+
+                    "--no-playlist",
+
+                    "--verbose",
+
+                    "--restrict-filenames",
+
+                    "--no-part",
+
+                    "--remote-components",
+                    "ejs:github",
+
+                    "-f",
+                    "bv*+ba/b",
+
+                    "--merge-output-format",
+                    "mp4",
+
+                    "-o",
+                    template,
+
+                    url
+
+                ];
+
+                console.log(
+                    "yt-dlp startet:"
+                );
+
+                console.log(
+                    ytDlpArgs.join(" ")
+                );
 
                 const ytDlpResult =
                     await runCommand(
                         "yt-dlp",
-                        [
-                            "--no-playlist",
-
-                            "--no-warnings",
-
-                            "--restrict-filenames",
-
-                            "--no-part",
-
-                            "-f",
-                            "bestvideo+bestaudio/best",
-
-                            "--merge-output-format",
-                            "mp4",
-
-                            "-o",
-                            template,
-
-                            url
-                        ]
+                        ytDlpArgs
                     );
 
                 console.log(
@@ -303,7 +392,6 @@ app.post(
                         TEMP_DIR,
                         downloaded
                     );
-
             }
 
             /* =================================================
@@ -315,9 +403,12 @@ app.post(
                 if (!req.file) {
 
                     return res.status(400).json({
+
                         success: false,
+
                         error:
                             "Bitte eine URL oder eine Datei auswählen."
+
                     });
                 }
 
@@ -339,6 +430,24 @@ app.post(
                 );
             }
 
+            /* =================================================
+               FFMPEG PRÜFEN
+            ================================================= */
+
+            const ffmpegAvailable =
+                await commandAvailable("ffmpeg");
+
+            if (!ffmpegAvailable) {
+
+                throw new Error(
+                    "FFmpeg ist auf dem Server nicht verfügbar."
+                );
+            }
+
+            /* =================================================
+               OUTPUT
+            ================================================= */
+
             const outputName =
                 `${safeName}-${Date.now()}.${format}`;
 
@@ -352,20 +461,13 @@ app.post(
                FFMPEG
             ================================================= */
 
-            const ffmpegAvailable =
-                await commandAvailable("ffmpeg");
-
-            if (!ffmpegAvailable) {
-
-                throw new Error(
-                    "FFmpeg ist auf dem Server nicht verfügbar."
-                );
-            }
-
             const ffmpegArgs = [
+
                 "-y",
+
                 "-i",
                 inputFile
+
             ];
 
             /* =================================================
@@ -375,11 +477,15 @@ app.post(
             if (format === "mp3") {
 
                 ffmpegArgs.push(
+
                     "-vn",
+
                     "-codec:a",
                     "libmp3lame",
+
                     "-b:a",
                     `${safeAudioQuality}k`
+
                 );
             }
 
@@ -390,11 +496,15 @@ app.post(
             else if (format === "m4a") {
 
                 ffmpegArgs.push(
+
                     "-vn",
+
                     "-codec:a",
                     "aac",
+
                     "-b:a",
                     `${safeAudioQuality}k`
+
                 );
             }
 
@@ -405,9 +515,12 @@ app.post(
             else if (format === "wav") {
 
                 ffmpegArgs.push(
+
                     "-vn",
+
                     "-codec:a",
                     "pcm_s16le"
+
                 );
             }
 
@@ -418,9 +531,12 @@ app.post(
             else if (format === "flac") {
 
                 ffmpegArgs.push(
+
                     "-vn",
+
                     "-codec:a",
                     "flac"
+
                 );
             }
 
@@ -431,11 +547,15 @@ app.post(
             else if (format === "aac") {
 
                 ffmpegArgs.push(
+
                     "-vn",
+
                     "-codec:a",
                     "aac",
+
                     "-b:a",
                     `${safeAudioQuality}k`
+
                 );
             }
 
@@ -446,11 +566,15 @@ app.post(
             else if (format === "ogg") {
 
                 ffmpegArgs.push(
+
                     "-vn",
+
                     "-codec:a",
                     "libvorbis",
+
                     "-b:a",
                     `${safeAudioQuality}k`
+
                 );
             }
 
@@ -461,25 +585,33 @@ app.post(
             else if (format === "mp4") {
 
                 ffmpegArgs.push(
+
                     "-map",
                     "0:v:0?",
+
                     "-map",
                     "0:a:0?",
+
                     "-c:v",
                     "libx264",
+
                     "-preset",
                     "veryfast",
+
                     "-crf",
                     "23",
+
                     "-c:a",
                     "aac",
+
                     "-b:a",
                     `${safeAudioQuality}k`
+
                 );
             }
 
             /* =================================================
-               AUDIO NORMALISIEREN
+               NORMALISIEREN
             ================================================= */
 
             if (
@@ -487,8 +619,10 @@ app.post(
             ) {
 
                 ffmpegArgs.push(
+
                     "-af",
                     "loudnorm"
+
                 );
             }
 
@@ -501,8 +635,10 @@ app.post(
             ) {
 
                 ffmpegArgs.push(
+
                     "-map_metadata",
                     "-1"
+
                 );
             }
 
@@ -569,9 +705,7 @@ app.post(
                 "Konvertierung erfolgreich:"
             );
 
-            console.log(
-                outputName
-            );
+            console.log(outputName);
 
             console.log(
                 "======================================"
@@ -603,9 +737,7 @@ app.post(
                 "MEDIAFORGE FEHLER"
             );
 
-            console.error(
-                error
-            );
+            console.error(error);
 
             console.error(
                 "======================================"
@@ -665,13 +797,17 @@ function isHttpUrl(value) {
             new URL(value);
 
         return (
+
             parsed.protocol === "http:" ||
+
             parsed.protocol === "https:"
+
         );
 
     } catch {
 
         return false;
+
     }
 }
 
@@ -693,20 +829,27 @@ function isSupportedPlatform(value) {
                 );
 
         return (
+
             hostname === "youtube.com" ||
+
             hostname.endsWith(".youtube.com") ||
+
             hostname === "youtu.be" ||
 
             hostname === "tiktok.com" ||
+
             hostname.endsWith(".tiktok.com") ||
 
             hostname === "instagram.com" ||
+
             hostname.endsWith(".instagram.com")
+
         );
 
     } catch {
 
         return false;
+
     }
 }
 
@@ -720,6 +863,7 @@ function runCommand(
 ) {
 
     return new Promise(
+
         (resolve, reject) => {
 
             console.log(
@@ -751,6 +895,7 @@ function runCommand(
                         `[${command}]`,
                         text.trim()
                     );
+
                 }
             );
 
@@ -767,6 +912,7 @@ function runCommand(
                         `[${command}]`,
                         text.trim()
                     );
+
                 }
             );
 
@@ -780,6 +926,7 @@ function runCommand(
                     );
 
                     reject(error);
+
                 }
             );
 
@@ -794,8 +941,10 @@ function runCommand(
                     if (code === 0) {
 
                         resolve({
+
                             stdout,
                             stderr
+
                         });
 
                     } else {
@@ -806,19 +955,26 @@ function runCommand(
                             );
 
                         reject(
+
                             new Error(
+
                                 `${command} wurde mit Code ${code} beendet.\n${details}`
+
                             )
+
                         );
+
                     }
+
                 }
             );
+
         }
     );
 }
 
 /* =========================================================
-   COMMAND VERFÜGBAR?
+   COMMAND VERFÜGBAR
 ========================================================= */
 
 function commandAvailable(
@@ -826,6 +982,7 @@ function commandAvailable(
 ) {
 
     return new Promise(
+
         resolve => {
 
             const child =
@@ -840,18 +997,23 @@ function commandAvailable(
             child.on(
                 "error",
                 () => {
+
                     resolve(false);
+
                 }
             );
 
             child.on(
                 "close",
                 code => {
+
                     resolve(
                         code === 0
                     );
+
                 }
             );
+
         }
     );
 }
@@ -866,7 +1028,10 @@ function getCommandError(
 
     if (!stderr) {
 
-        return "Keine detaillierte Fehlermeldung verfügbar.";
+        return (
+            "Keine detaillierte Fehlermeldung verfügbar."
+        );
+
     }
 
     const lines =
@@ -879,8 +1044,9 @@ function getCommandError(
             .filter(Boolean);
 
     return lines
-        .slice(-10)
+        .slice(-15)
         .join(" ");
+
 }
 
 /* =========================================================
@@ -912,11 +1078,15 @@ function removeFile(
     try {
 
         if (
+
             file &&
+
             fs.existsSync(file)
+
         ) {
 
             fs.unlinkSync(file);
+
         }
 
     } catch (error) {
@@ -925,6 +1095,7 @@ function removeFile(
             "Datei konnte nicht gelöscht werden:",
             error
         );
+
     }
 }
 
@@ -939,31 +1110,42 @@ function formatBytes(
     if (!bytes) {
 
         return "0 Bytes";
+
     }
 
     const units = [
+
         "Bytes",
         "KB",
         "MB",
         "GB"
+
     ];
 
     const index =
         Math.min(
+
             Math.floor(
+
                 Math.log(bytes) /
                 Math.log(1024)
+
             ),
+
             units.length - 1
+
         );
 
     return `${(
+
         bytes /
         Math.pow(
             1024,
             index
         )
+
     ).toFixed(2)} ${units[index]}`;
+
 }
 
 /* =========================================================
@@ -976,8 +1158,10 @@ function getFriendlyError(
 
     const message =
         String(
+
             error?.message ||
             error
+
         );
 
     console.error(
@@ -985,51 +1169,11 @@ function getFriendlyError(
         message
     );
 
-    /*
-     * Wir verstecken den yt-dlp-Fehler
-     * NICHT mehr.
-     *
-     * Dadurch sehen wir beim Testen,
-     * warum eine URL nicht funktioniert.
-     */
+    return message.slice(
+        0,
+        2000
+    ) || "Unbekannter Serverfehler.";
 
-    if (
-        message
-            .toLowerCase()
-            .includes("yt-dlp")
-    ) {
-
-        return (
-            "yt-dlp Fehler: " +
-            message.slice(
-                0,
-                1500
-            )
-        );
-    }
-
-    if (
-        message
-            .toLowerCase()
-            .includes("ffmpeg")
-    ) {
-
-        return (
-            "FFmpeg Fehler: " +
-            message.slice(
-                0,
-                1500
-            )
-        );
-    }
-
-    return (
-        message.slice(
-            0,
-            1500
-        ) ||
-        "Unbekannter Serverfehler."
-    );
 }
 
 /* =========================================================
@@ -1047,5 +1191,6 @@ app.listen(
         console.log(
             `Port: ${PORT}`
         );
+
     }
 );
