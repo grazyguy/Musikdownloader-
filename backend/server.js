@@ -17,161 +17,217 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-const TMP_DIR = path.join(os.tmpdir(), "mediaforge");
+const TMP_DIR = path.join(
+    os.tmpdir(),
+    "mediaforge"
+);
 
-if (!fs.existsSync(TMP_DIR)) {
-    fs.mkdirSync(TMP_DIR, { recursive: true });
-}
+const DOWNLOAD_DIR = path.join(
+    TMP_DIR,
+    "downloads"
+);
+
+fs.mkdirSync(
+    TMP_DIR,
+    { recursive: true }
+);
+
+fs.mkdirSync(
+    DOWNLOAD_DIR,
+    { recursive: true }
+);
 
 const upload = multer({
     dest: TMP_DIR
 });
 
-/*
-=========================================================
-TOOLS
-=========================================================
-*/
 
-async function checkTool(command, args = ["--version"]) {
+/* =====================================================
+   TOOL TEST
+===================================================== */
+
+async function checkTool(
+    command,
+    args = ["--version"]
+) {
+
     try {
-        const result = await execFileAsync(command, args);
+
+        const result =
+            await execFileAsync(
+                command,
+                args
+            );
 
         return {
             available: true,
             exitCode: 0,
-            output: (result.stdout || result.stderr || "").trim()
+            output:
+                (
+                    result.stdout ||
+                    result.stderr ||
+                    ""
+                ).trim()
         };
+
     } catch (error) {
+
         return {
             available: false,
-            exitCode: error.code || 1,
-            output: (error.stdout || error.stderr || error.message || "").trim()
+            exitCode:
+                error.code || 1,
+            output:
+                (
+                    error.stdout ||
+                    error.stderr ||
+                    error.message ||
+                    ""
+                ).trim()
         };
+
     }
+
 }
 
-async function findCommand(command) {
+
+/* =====================================================
+   PLATTFORM ERKENNEN
+===================================================== */
+
+function getPlatform(url) {
+
     try {
-        const { stdout } = await execFileAsync(
-            "sh",
-            ["-c", `command -v ${command}`]
-        );
 
-        return stdout.trim();
+        const hostname =
+            new URL(url)
+                .hostname
+                .toLowerCase();
+
+        if (
+            hostname === "youtube.com" ||
+            hostname === "www.youtube.com" ||
+            hostname === "m.youtube.com" ||
+            hostname === "music.youtube.com" ||
+            hostname === "youtu.be"
+        ) {
+
+            return "youtube";
+
+        }
+
+        if (
+            hostname === "tiktok.com" ||
+            hostname === "www.tiktok.com" ||
+            hostname === "vm.tiktok.com" ||
+            hostname === "vt.tiktok.com"
+        ) {
+
+            return "tiktok";
+
+        }
+
+        if (
+            hostname === "instagram.com" ||
+            hostname === "www.instagram.com"
+        ) {
+
+            return "instagram";
+
+        }
+
+        return "unknown";
+
     } catch {
-        return null;
+
+        return "unknown";
+
     }
+
 }
 
-/*
-=========================================================
-STATUS
-=========================================================
-*/
 
-app.get("/", (req, res) => {
-    res.json({
-        success: true,
-        service: "MediaForge API",
-        status: "online",
-        ytDlp: true,
-        ffmpeg: true,
-        deno: true
-    });
-});
-
-app.get("/api/status", async (req, res) => {
-
-    const ytDlp = await checkTool("yt-dlp");
-    const ffmpeg = await checkTool("ffmpeg", ["-version"]);
-    const deno = await checkTool("deno");
-
-    res.json({
-        success: true,
-        tools: {
-            "yt-dlp": ytDlp,
-            ffmpeg: ffmpeg,
-            deno: deno
-        }
-    });
-});
-
-/*
-=========================================================
-URL VALIDIERUNG
-=========================================================
-*/
+/* =====================================================
+   URL PRÜFEN
+===================================================== */
 
 function isAllowedUrl(input) {
 
     try {
 
-        const parsed = new URL(input);
+        const parsed =
+            new URL(input);
 
         if (
             parsed.protocol !== "http:" &&
             parsed.protocol !== "https:"
         ) {
+
             return false;
+
         }
 
-        const hostname =
-            parsed.hostname.toLowerCase();
-
-        const allowedHosts = [
-            "youtube.com",
-            "www.youtube.com",
-            "m.youtube.com",
-            "youtu.be",
-            "music.youtube.com",
-
-            "tiktok.com",
-            "www.tiktok.com",
-            "vm.tiktok.com",
-            "vt.tiktok.com",
-
-            "instagram.com",
-            "www.instagram.com"
-        ];
-
-        return allowedHosts.some(host =>
-            hostname === host ||
-            hostname.endsWith("." + host)
+        return [
+            "youtube",
+            "tiktok",
+            "instagram"
+        ].includes(
+            getPlatform(input)
         );
 
     } catch {
+
         return false;
+
     }
+
 }
 
-/*
-=========================================================
-DATEINAME
-=========================================================
-*/
 
-function cleanFilename(filename) {
+/* =====================================================
+   DATEINAME
+===================================================== */
+
+function cleanFilename(
+    filename
+) {
 
     let name =
-        String(filename || "mediaforge-download")
+        String(
+            filename ||
+            "mediaforge-download"
+        )
             .trim()
-            .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
-            .replace(/\s+/g, "-")
-            .replace(/-+/g, "-");
+            .replace(
+                /[<>:"/\\|?*\x00-\x1F]/g,
+                ""
+            )
+            .replace(
+                /\s+/g,
+                "-"
+            )
+            .replace(
+                /-+/g,
+                "-"
+            );
 
     if (!name) {
-        name = "mediaforge-download";
+
+        name =
+            "mediaforge-download";
+
     }
 
-    return name.substring(0, 100);
+    return name.substring(
+        0,
+        100
+    );
+
 }
 
-/*
-=========================================================
-FORMAT
-=========================================================
-*/
+
+/* =====================================================
+   FORMATE
+===================================================== */
 
 const allowedFormats = [
     "mp3",
@@ -183,46 +239,144 @@ const allowedFormats = [
     "ogg"
 ];
 
-function getExtension(format) {
 
-    if (format === "mp3") return "mp3";
-    if (format === "mp4") return "mp4";
-    if (format === "m4a") return "m4a";
-    if (format === "wav") return "wav";
-    if (format === "flac") return "flac";
-    if (format === "aac") return "aac";
-    if (format === "ogg") return "ogg";
+function getExtension(
+    format
+) {
 
-    return "mp3";
+    return allowedFormats.includes(
+        format
+    )
+        ? format
+        : "mp3";
+
 }
 
-/*
-=========================================================
-CONTENT TYPE
-=========================================================
-*/
 
-function getContentType(extension) {
+/* =====================================================
+   MIME TYPES
+===================================================== */
+
+function getContentType(
+    extension
+) {
 
     const types = {
-        mp3: "audio/mpeg",
-        mp4: "video/mp4",
-        m4a: "audio/mp4",
-        wav: "audio/wav",
-        flac: "audio/flac",
-        aac: "audio/aac",
-        ogg: "audio/ogg"
+
+        mp3:
+            "audio/mpeg",
+
+        mp4:
+            "video/mp4",
+
+        m4a:
+            "audio/mp4",
+
+        wav:
+            "audio/wav",
+
+        flac:
+            "audio/flac",
+
+        aac:
+            "audio/aac",
+
+        ogg:
+            "audio/ogg"
+
     };
 
-    return types[extension] ||
-        "application/octet-stream";
+    return (
+        types[extension] ||
+        "application/octet-stream"
+    );
+
 }
 
-/*
-=========================================================
-CONVERT
-=========================================================
-*/
+
+/* =====================================================
+   API START
+===================================================== */
+
+app.get(
+    "/",
+    (req, res) => {
+
+        res.json({
+
+            success: true,
+
+            service:
+                "MediaForge API",
+
+            status:
+                "online",
+
+            ytDlp:
+                true,
+
+            ffmpeg:
+                true,
+
+            deno:
+                true
+
+        });
+
+    }
+);
+
+
+/* =====================================================
+   STATUS
+===================================================== */
+
+app.get(
+    "/api/status",
+    async (req, res) => {
+
+        const ytDlp =
+            await checkTool(
+                "yt-dlp"
+            );
+
+        const ffmpeg =
+            await checkTool(
+                "ffmpeg",
+                ["-version"]
+            );
+
+        const deno =
+            await checkTool(
+                "deno"
+            );
+
+        res.json({
+
+            success: true,
+
+            tools: {
+
+                "yt-dlp":
+                    ytDlp,
+
+                ffmpeg:
+                    ffmpeg,
+
+                deno:
+                    deno
+
+            }
+
+        });
+
+    }
+);
+
+
+/* =====================================================
+   DOWNLOAD / CONVERT
+===================================================== */
 
 app.post(
     "/api/convert",
@@ -230,11 +384,16 @@ app.post(
     async (req, res) => {
 
         const url =
-            String(req.body.url || "").trim();
+            String(
+                req.body.url ||
+                ""
+            ).trim();
 
         const format =
-            String(req.body.format || "mp3")
-                .toLowerCase();
+            String(
+                req.body.format ||
+                "mp3"
+            ).toLowerCase();
 
         const quality =
             String(
@@ -243,57 +402,95 @@ app.post(
                 "192"
             );
 
-        const requestedFilename =
+        const filename =
             cleanFilename(
                 req.body.filename
             );
 
-        /*
-        -------------------------------------------------
-        VALIDIERUNG
-        -------------------------------------------------
-        */
+
+        /* -----------------------------------------------
+           URL
+        ----------------------------------------------- */
 
         if (!url) {
 
             return res.status(400).json({
+
                 success: false,
-                error: "Keine URL angegeben."
+
+                error:
+                    "Bitte eine URL eingeben."
+
             });
 
         }
+
 
         if (!isAllowedUrl(url)) {
 
             return res.status(400).json({
+
                 success: false,
+
                 error:
-                    "Diese URL wird nicht unterstützt. Bitte verwende eine öffentliche URL von YouTube, TikTok oder Instagram."
+                    "Bitte eine öffentliche YouTube-, TikTok- oder Instagram-URL verwenden."
+
             });
 
         }
 
-        if (!allowedFormats.includes(format)) {
+
+        /* -----------------------------------------------
+           FORMAT
+        ----------------------------------------------- */
+
+        if (
+            !allowedFormats.includes(
+                format
+            )
+        ) {
 
             return res.status(400).json({
+
                 success: false,
-                error: "Dieses Format wird nicht unterstützt."
+
+                error:
+                    "Dieses Format wird nicht unterstützt."
+
             });
 
         }
+
+
+        const platform =
+            getPlatform(url);
 
         const extension =
             getExtension(format);
 
+
+        /* -----------------------------------------------
+           TEMP ORDNER
+        ----------------------------------------------- */
+
         const id =
-            crypto.randomBytes(12).toString("hex");
+            crypto.randomBytes(
+                12
+            ).toString("hex");
 
         const workDir =
-            path.join(TMP_DIR, id);
+            path.join(
+                TMP_DIR,
+                id
+            );
 
-        fs.mkdirSync(workDir, {
-            recursive: true
-        });
+        fs.mkdirSync(
+            workDir,
+            {
+                recursive: true
+            }
+        );
+
 
         const outputBase =
             path.join(
@@ -301,8 +498,10 @@ app.post(
                 "mediaforge"
             );
 
+
         const finalFilename =
-            `${requestedFilename}.${extension}`;
+            `${filename}.${extension}`;
+
 
         const finalPath =
             path.join(
@@ -310,39 +509,46 @@ app.post(
                 finalFilename
             );
 
+
         try {
 
-            /*
-            -------------------------------------------------
-            YT-DLP ARGUMENTE
-            -------------------------------------------------
-            */
+            /* -------------------------------------------
+               YT-DLP
+            ------------------------------------------- */
 
             const args = [
+
                 "--no-playlist",
+
                 "--no-warnings",
+
                 "--restrict-filenames",
+
                 "--output",
+
                 `${outputBase}.%(ext)s`
+
             ];
 
-            /*
-            -------------------------------------------------
-            AUDIO
-            -------------------------------------------------
-            */
 
-            if (format !== "mp4") {
+            /* -------------------------------------------
+               AUDIO
+            ------------------------------------------- */
+
+            if (
+                format !== "mp4"
+            ) {
 
                 args.push(
+
                     "--extract-audio",
+
                     "--audio-format",
+
                     format
+
                 );
 
-                /*
-                WAV / FLAC brauchen keine Bitrate.
-                */
 
                 if (
                     format === "mp3" ||
@@ -352,66 +558,90 @@ app.post(
                 ) {
 
                     args.push(
+
                         "--audio-quality",
+
                         `${quality}K`
+
                     );
 
                 }
 
-            } else {
+            }
 
-                /*
-                -------------------------------------------------
-                VIDEO MP4
-                -------------------------------------------------
-                */
+            else {
+
+                /* ---------------------------------------
+                   VIDEO
+                --------------------------------------- */
 
                 args.push(
+
                     "--merge-output-format",
+
                     "mp4"
+
                 );
 
             }
 
-            args.push(url);
 
-            /*
-            -------------------------------------------------
-            DOWNLOAD
-            -------------------------------------------------
-            */
-
-            await execFileAsync(
-                "yt-dlp",
-                args,
-                {
-                    cwd: workDir,
-                    maxBuffer: 1024 * 1024 * 10
-                }
+            args.push(
+                url
             );
 
-            /*
-            -------------------------------------------------
-            DATEI SUCHEN
-            -------------------------------------------------
-            */
+
+            /* -------------------------------------------
+               DOWNLOAD
+            ------------------------------------------- */
+
+            await execFileAsync(
+
+                "yt-dlp",
+
+                args,
+
+                {
+
+                    cwd:
+                        workDir,
+
+                    maxBuffer:
+                        20 *
+                        1024 *
+                        1024
+
+                }
+
+            );
+
+
+            /* -------------------------------------------
+               DATEI FINDEN
+            ------------------------------------------- */
 
             const files =
-                fs.readdirSync(workDir);
+                fs.readdirSync(
+                    workDir
+                );
+
 
             const mediaFile =
-                files.find(file =>
-                    file !== finalFilename &&
-                    /\.(mp3|mp4|m4a|wav|flac|aac|ogg)$/i.test(file)
+                files.find(
+                    file =>
+                        /\.(mp3|mp4|m4a|wav|flac|aac|ogg)$/i
+                            .test(file)
                 );
+
 
             if (!mediaFile) {
 
                 throw new Error(
-                    "Die konvertierte Datei wurde nicht gefunden."
+                    "Keine fertige Mediendatei gefunden."
                 );
 
             }
+
 
             const generatedPath =
                 path.join(
@@ -419,19 +649,29 @@ app.post(
                     mediaFile
                 );
 
-            /*
-            -------------------------------------------------
-            DATEI AUF FINALEN NAMEN VERSCHIEBEN
-            -------------------------------------------------
-            */
+
+            /* -------------------------------------------
+               DATEI UMBENENNEN
+            ------------------------------------------- */
 
             fs.renameSync(
+
                 generatedPath,
+
                 finalPath
+
             );
 
+
+            /* -------------------------------------------
+               DATEIGRÖSSE
+            ------------------------------------------- */
+
             const stats =
-                fs.statSync(finalPath);
+                fs.statSync(
+                    finalPath
+                );
+
 
             const sizeMB =
                 (
@@ -440,56 +680,52 @@ app.post(
                     1024
                 ).toFixed(2);
 
-            /*
-            -------------------------------------------------
-            DOWNLOAD-ID
-            -------------------------------------------------
-            */
+
+            /* -------------------------------------------
+               DOWNLOAD ID
+            ------------------------------------------- */
 
             const downloadId =
-                crypto.randomBytes(16).toString("hex");
+                crypto.randomBytes(
+                    16
+                ).toString("hex");
 
-            /*
-            -------------------------------------------------
-            TEMPORÄRE DOWNLOAD-DATEI SPEICHERN
-            -------------------------------------------------
-            */
-
-            const downloadDir =
-                path.join(
-                    TMP_DIR,
-                    "downloads"
-                );
-
-            if (!fs.existsSync(downloadDir)) {
-                fs.mkdirSync(downloadDir, {
-                    recursive: true
-                });
-            }
 
             const downloadPath =
                 path.join(
-                    downloadDir,
+
+                    DOWNLOAD_DIR,
+
                     `${downloadId}-${finalFilename}`
+
                 );
 
+
             fs.copyFileSync(
+
                 finalPath,
+
                 downloadPath
+
             );
 
-            /*
-            -------------------------------------------------
-            URL ZUM DOWNLOAD
-            -------------------------------------------------
-            */
+
+            /* -------------------------------------------
+               DOWNLOAD URL
+            ------------------------------------------- */
 
             const protocol =
-                req.headers["x-forwarded-proto"] ||
+                req.headers[
+                    "x-forwarded-proto"
+                ] ||
                 req.protocol;
 
+
             const host =
-                req.get("host");
+                req.get(
+                    "host"
+                );
+
 
             const downloadUrl =
                 `${protocol}://${host}/api/download/${encodeURIComponent(
@@ -498,36 +734,58 @@ app.post(
                     finalFilename
                 )}`;
 
-            /*
-            -------------------------------------------------
-            ANTWORT
-            -------------------------------------------------
-            */
+
+            /* -------------------------------------------
+               ERFOLG
+            ------------------------------------------- */
 
             res.json({
+
                 success: true,
-                filename: finalFilename,
-                format: extension,
-                size: `${sizeMB} MB`,
-                downloadUrl: downloadUrl
+
+                platform:
+                    platform,
+
+                filename:
+                    finalFilename,
+
+                format:
+                    extension,
+
+                size:
+                    `${sizeMB} MB`,
+
+                downloadUrl:
+                    downloadUrl
+
             });
 
-            /*
-            -------------------------------------------------
-            WORKDIR LÖSCHEN
-            -------------------------------------------------
-            */
 
-            setTimeout(() => {
+            /* -------------------------------------------
+               TEMPORÄRE DATEI LÖSCHEN
+            ------------------------------------------- */
 
-                try {
-                    fs.rmSync(workDir, {
-                        recursive: true,
-                        force: true
-                    });
-                } catch {}
+            setTimeout(
+                () => {
 
-            }, 5000);
+                    try {
+
+                        fs.rmSync(
+                            workDir,
+                            {
+                                recursive:
+                                    true,
+                                force:
+                                    true
+                            }
+                        );
+
+                    } catch {}
+
+                },
+                5000
+            );
+
 
         } catch (error) {
 
@@ -536,19 +794,174 @@ app.post(
                 error
             );
 
+
             try {
-                fs.rmSync(workDir, {
-                    recursive: true,
-                    force: true
-                });
+
+                fs.rmSync(
+                    workDir,
+                    {
+                        recursive:
+                            true,
+                        force:
+                            true
+                    }
+                );
+
             } catch {}
 
-            res.status(500).json({
-                success: false,
+
+            const stderr =
+                String(
+                    error.stderr ||
+                    ""
+                );
+
+
+            const lowerError =
+                stderr.toLowerCase();
+
+
+            /* -------------------------------------------
+               YOUTUBE BLOCK
+            ------------------------------------------- */
+
+            if (
+                lowerError.includes(
+                    "sign in to confirm"
+                ) ||
+                lowerError.includes(
+                    "not a bot"
+                ) ||
+                lowerError.includes(
+                    "confirm you're not a bot"
+                ) ||
+                lowerError.includes(
+                    "cookies-from-browser"
+                )
+            ) {
+
+                return res.status(
+                    403
+                ).json({
+
+                    success:
+                        false,
+
+                    platform:
+                        "youtube",
+
+                    error:
+                        "YouTube blockiert den Zugriff von diesem Server momentan. Es wurden keine persönlichen Cookies verwendet."
+
+                });
+
+            }
+
+
+            /* -------------------------------------------
+               INSTAGRAM
+            ------------------------------------------- */
+
+            if (
+                platform ===
+                "instagram"
+            ) {
+
+                if (
+                    lowerError.includes(
+                        "login"
+                    ) ||
+                    lowerError.includes(
+                        "private"
+                    ) ||
+                    lowerError.includes(
+                        "sign in"
+                    )
+                ) {
+
+                    return res.status(
+                        403
+                    ).json({
+
+                        success:
+                            false,
+
+                        platform:
+                            "instagram",
+
+                        error:
+                            "Instagram verlangt für diesen Inhalt eine Anmeldung oder der Inhalt ist nicht öffentlich verfügbar."
+
+                    });
+
+                }
+
+            }
+
+
+            /* -------------------------------------------
+               TIKTOK
+            ------------------------------------------- */
+
+            if (
+                platform ===
+                "tiktok"
+            ) {
+
+                if (
+                    lowerError.includes(
+                        "login"
+                    ) ||
+                    lowerError.includes(
+                        "private"
+                    ) ||
+                    lowerError.includes(
+                        "unavailable"
+                    )
+                ) {
+
+                    return res.status(
+                        403
+                    ).json({
+
+                        success:
+                            false,
+
+                        platform:
+                            "tiktok",
+
+                        error:
+                            "Dieser TikTok-Inhalt ist momentan nicht öffentlich verfügbar."
+
+                    });
+
+                }
+
+            }
+
+
+            /* -------------------------------------------
+               ALLGEMEINER FEHLER
+            ------------------------------------------- */
+
+            return res.status(
+                500
+            ).json({
+
+                success:
+                    false,
+
+                platform:
+                    platform,
+
                 error:
-                    "Download/Umwandlung fehlgeschlagen.",
+                    "Der Download konnte nicht verarbeitet werden.",
+
                 details:
-                    error.message || "Unbekannter Fehler."
+                    stderr.trim() ||
+                    error.message ||
+                    "Unbekannter Fehler."
+
             });
 
         }
@@ -556,18 +969,20 @@ app.post(
     }
 );
 
-/*
-=========================================================
-DOWNLOAD ENDPOINT
-=========================================================
-*/
+
+/* =====================================================
+   DOWNLOAD DATEI
+===================================================== */
 
 app.get(
     "/api/download/:id/:filename",
-    async (req, res) => {
+    (req, res) => {
 
         const id =
-            String(req.params.id);
+            String(
+                req.params.id
+            );
+
 
         const filename =
             cleanFilename(
@@ -576,127 +991,149 @@ app.get(
                 )
             );
 
-        const downloadDir =
-            path.join(
-                TMP_DIR,
-                "downloads"
-            );
 
         const files =
-            fs.readdirSync(downloadDir);
+            fs.readdirSync(
+                DOWNLOAD_DIR
+            );
+
 
         const matchingFile =
-            files.find(file =>
-                file.startsWith(id + "-")
+            files.find(
+                file =>
+                    file.startsWith(
+                        id + "-"
+                    )
             );
+
 
         if (!matchingFile) {
 
-            return res.status(404).send(
+            return res.status(
+                404
+            ).send(
                 "Datei nicht mehr verfügbar."
             );
 
         }
 
+
         const filePath =
             path.join(
-                downloadDir,
+                DOWNLOAD_DIR,
                 matchingFile
             );
 
-        /*
-        -------------------------------------------------
-        SAFARI / IPHONE DOWNLOAD
-        -------------------------------------------------
-        */
 
         const extension =
-            path.extname(filename)
-                .replace(".", "")
+            path.extname(
+                filename
+            )
+                .replace(
+                    ".",
+                    ""
+                )
                 .toLowerCase();
+
+
+        /* -------------------------------------------
+           SAFARI / IPHONE
+        ------------------------------------------- */
 
         res.setHeader(
             "Content-Type",
-            getContentType(extension)
+            getContentType(
+                extension
+            )
         );
 
-        /*
-        WICHTIG:
-        attachment sorgt dafür,
-        dass der Browser die Datei
-        als Download behandelt.
-        */
 
         res.setHeader(
             "Content-Disposition",
             `attachment; filename="${filename}"`
         );
 
+
         res.setHeader(
             "Content-Length",
-            fs.statSync(filePath).size
+            fs.statSync(
+                filePath
+            ).size
         );
+
 
         res.setHeader(
             "Cache-Control",
             "no-store"
         );
 
+
         res.setHeader(
             "X-Content-Type-Options",
             "nosniff"
         );
 
+
         res.sendFile(
-            path.resolve(filePath),
+            path.resolve(
+                filePath
+            ),
             error => {
 
                 if (error) {
+
                     console.error(
                         "Download error:",
                         error
                     );
+
                 }
 
             }
         );
 
-        /*
-        -------------------------------------------------
-        DATEI NACH EINIGER ZEIT LÖSCHEN
-        -------------------------------------------------
-        */
 
-        setTimeout(() => {
+        /* -------------------------------------------
+           DATEI NACH 10 MINUTEN LÖSCHEN
+        ------------------------------------------- */
 
-            try {
+        setTimeout(
+            () => {
 
-                if (
-                    fs.existsSync(filePath)
-                ) {
+                try {
 
-                    fs.unlinkSync(
-                        filePath
-                    );
+                    if (
+                        fs.existsSync(
+                            filePath
+                        )
+                    ) {
 
-                }
+                        fs.unlinkSync(
+                            filePath
+                        );
 
-            } catch {}
+                    }
 
-        }, 10 * 60 * 1000);
+                } catch {}
+
+            },
+            10 * 60 * 1000
+        );
 
     }
 );
 
-/*
-=========================================================
-SERVER
-=========================================================
-*/
+
+/* =====================================================
+   SERVER START
+===================================================== */
 
 app.listen(
+
     PORT,
+
     "0.0.0.0",
+
     () => {
 
         console.log(
@@ -708,4 +1145,5 @@ app.listen(
         );
 
     }
+
 );
