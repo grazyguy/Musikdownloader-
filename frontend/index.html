@@ -567,28 +567,7 @@ async function startDownload() {
            SERVER TEST
         ------------------------------------------------- */
 
-        const statusResponse =
-            await fetch(
-                API_URL + "/api/status"
-            );
-
-        if (!statusResponse.ok) {
-
-            throw new Error(
-                "Der MediaForge Server antwortet nicht."
-            );
-        }
-
-        const status =
-            await statusResponse.json();
-
-
-        if (!status.ytDlp) {
-
-            throw new Error(
-                "yt-dlp ist auf dem Server nicht verfügbar."
-            );
-        }
+        
 
 
         
