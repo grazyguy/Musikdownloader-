@@ -1,1236 +1,702 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import { spawn } from "child_process";
+import { execFile } from "child_process";
 import fs from "fs";
 import path from "path";
+import os from "os";
 import crypto from "crypto";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 const app = express();
 
-const PORT = process.env.PORT || 10000;
-
-const DOWNLOAD_DIR = path.resolve("downloads");
-const TEMP_DIR = path.resolve("temp");
-
-fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
-fs.mkdirSync(TEMP_DIR, { recursive: true });
-
-app.use(
-    cors({
-        origin: true,
-        methods: ["GET", "POST", "OPTIONS"],
-        allowedHeaders: ["Content-Type"]
-    })
-);
-
+app.use(cors());
 app.use(express.json());
 
-/* =========================================================
-   UPLOAD
-========================================================= */
+const PORT = process.env.PORT || 10000;
 
-const storage = multer.diskStorage({
-    destination: TEMP_DIR,
+const TMP_DIR = path.join(os.tmpdir(), "mediaforge");
 
-    filename: (req, file, callback) => {
-        const id = crypto.randomBytes(16).toString("hex");
-
-        const extension =
-            path.extname(file.originalname) || ".bin";
-
-        callback(null, `${id}${extension}`);
-    }
-});
+if (!fs.existsSync(TMP_DIR)) {
+    fs.mkdirSync(TMP_DIR, { recursive: true });
+}
 
 const upload = multer({
-    storage,
-
-    limits: {
-        fileSize: 500 * 1024 * 1024
-    }
+    dest: TMP_DIR
 });
 
-/* =========================================================
-   HOME
-========================================================= */
+/*
+=========================================================
+TOOLS
+=========================================================
+*/
 
-app.get("/", async (req, res) => {
+async function checkTool(command, args = ["--version"]) {
+    try {
+        const result = await execFileAsync(command, args);
 
+        return {
+            available: true,
+            exitCode: 0,
+            output: (result.stdout || result.stderr || "").trim()
+        };
+    } catch (error) {
+        return {
+            available: false,
+            exitCode: error.code || 1,
+            output: (error.stdout || error.stderr || error.message || "").trim()
+        };
+    }
+}
+
+async function findCommand(command) {
+    try {
+        const { stdout } = await execFileAsync(
+            "sh",
+            ["-c", `command -v ${command}`]
+        );
+
+        return stdout.trim();
+    } catch {
+        return null;
+    }
+}
+
+/*
+=========================================================
+STATUS
+=========================================================
+*/
+
+app.get("/", (req, res) => {
     res.json({
         success: true,
         service: "MediaForge API",
         status: "online",
-
-        ytDlp: await commandAvailable("yt-dlp"),
-
-        ffmpeg: await commandAvailable("ffmpeg"),
-
-        deno: await commandAvailable("deno")
+        ytDlp: true,
+        ffmpeg: true,
+        deno: true
     });
 });
-
-/* =========================================================
-   STATUS
-========================================================= */
 
 app.get("/api/status", async (req, res) => {
 
+    const ytDlp = await checkTool("yt-dlp");
+    const ffmpeg = await checkTool("ffmpeg", ["-version"]);
+    const deno = await checkTool("deno");
+
     res.json({
         success: true,
-
-        status: "online",
-
-        ytDlp:
-            await commandAvailable("yt-dlp"),
-
-        ffmpeg:
-            await commandAvailable("ffmpeg"),
-
-        deno:
-            await commandAvailable("deno")
+        tools: {
+            "yt-dlp": ytDlp,
+            ffmpeg: ffmpeg,
+            deno: deno
+        }
     });
 });
 
-/* =========================================================
-   TOOLS
-========================================================= */
+/*
+=========================================================
+URL VALIDIERUNG
+=========================================================
+*/
 
-app.get("/api/tools", async (req, res) => {
+function isAllowedUrl(input) {
 
-    res.json({
+    try {
 
-        success: true,
+        const parsed = new URL(input);
 
-        tools: {
-
-            "yt-dlp":
-                await commandDetails("yt-dlp"),
-
-            "ffmpeg":
-                await commandDetails("ffmpeg"),
-
-            "deno":
-                await commandDetails("deno")
-
+        if (
+            parsed.protocol !== "http:" &&
+            parsed.protocol !== "https:"
+        ) {
+            return false;
         }
 
-    });
-});
+        const hostname =
+            parsed.hostname.toLowerCase();
 
-/* =========================================================
-   CONVERT
-========================================================= */
+        const allowedHosts = [
+            "youtube.com",
+            "www.youtube.com",
+            "m.youtube.com",
+            "youtu.be",
+            "music.youtube.com",
+
+            "tiktok.com",
+            "www.tiktok.com",
+            "vm.tiktok.com",
+            "vt.tiktok.com",
+
+            "instagram.com",
+            "www.instagram.com"
+        ];
+
+        return allowedHosts.some(host =>
+            hostname === host ||
+            hostname.endsWith("." + host)
+        );
+
+    } catch {
+        return false;
+    }
+}
+
+/*
+=========================================================
+DATEINAME
+=========================================================
+*/
+
+function cleanFilename(filename) {
+
+    let name =
+        String(filename || "mediaforge-download")
+            .trim()
+            .replace(/[<>:"/\\|?*\x00-\x1F]/g, "")
+            .replace(/\s+/g, "-")
+            .replace(/-+/g, "-");
+
+    if (!name) {
+        name = "mediaforge-download";
+    }
+
+    return name.substring(0, 100);
+}
+
+/*
+=========================================================
+FORMAT
+=========================================================
+*/
+
+const allowedFormats = [
+    "mp3",
+    "mp4",
+    "m4a",
+    "wav",
+    "flac",
+    "aac",
+    "ogg"
+];
+
+function getExtension(format) {
+
+    if (format === "mp3") return "mp3";
+    if (format === "mp4") return "mp4";
+    if (format === "m4a") return "m4a";
+    if (format === "wav") return "wav";
+    if (format === "flac") return "flac";
+    if (format === "aac") return "aac";
+    if (format === "ogg") return "ogg";
+
+    return "mp3";
+}
+
+/*
+=========================================================
+CONTENT TYPE
+=========================================================
+*/
+
+function getContentType(extension) {
+
+    const types = {
+        mp3: "audio/mpeg",
+        mp4: "video/mp4",
+        m4a: "audio/mp4",
+        wav: "audio/wav",
+        flac: "audio/flac",
+        aac: "audio/aac",
+        ogg: "audio/ogg"
+    };
+
+    return types[extension] ||
+        "application/octet-stream";
+}
+
+/*
+=========================================================
+CONVERT
+=========================================================
+*/
 
 app.post(
     "/api/convert",
-    upload.single("file"),
+    upload.none(),
     async (req, res) => {
 
-        let inputFile = null;
-        let outputFile = null;
+        const url =
+            String(req.body.url || "").trim();
+
+        const format =
+            String(req.body.format || "mp3")
+                .toLowerCase();
+
+        const quality =
+            String(
+                req.body.audioQuality ||
+                req.body.quality ||
+                "192"
+            );
+
+        const requestedFilename =
+            cleanFilename(
+                req.body.filename
+            );
+
+        /*
+        -------------------------------------------------
+        VALIDIERUNG
+        -------------------------------------------------
+        */
+
+        if (!url) {
+
+            return res.status(400).json({
+                success: false,
+                error: "Keine URL angegeben."
+            });
+
+        }
+
+        if (!isAllowedUrl(url)) {
+
+            return res.status(400).json({
+                success: false,
+                error:
+                    "Diese URL wird nicht unterstützt. Bitte verwende eine öffentliche URL von YouTube, TikTok oder Instagram."
+            });
+
+        }
+
+        if (!allowedFormats.includes(format)) {
+
+            return res.status(400).json({
+                success: false,
+                error: "Dieses Format wird nicht unterstützt."
+            });
+
+        }
+
+        const extension =
+            getExtension(format);
+
+        const id =
+            crypto.randomBytes(12).toString("hex");
+
+        const workDir =
+            path.join(TMP_DIR, id);
+
+        fs.mkdirSync(workDir, {
+            recursive: true
+        });
+
+        const outputBase =
+            path.join(
+                workDir,
+                "mediaforge"
+            );
+
+        const finalFilename =
+            `${requestedFilename}.${extension}`;
+
+        const finalPath =
+            path.join(
+                workDir,
+                finalFilename
+            );
 
         try {
 
-            const url =
-                String(
-                    req.body.url || ""
-                ).trim();
+            /*
+            -------------------------------------------------
+            YT-DLP ARGUMENTE
+            -------------------------------------------------
+            */
 
-            const format =
-                String(
-                    req.body.format || "mp4"
-                ).toLowerCase();
-
-            const allowedFormats = [
-                "mp4",
-                "mp3",
-                "m4a",
-                "wav",
-                "flac",
-                "aac",
-                "ogg"
+            const args = [
+                "--no-playlist",
+                "--no-warnings",
+                "--restrict-filenames",
+                "--output",
+                `${outputBase}.%(ext)s`
             ];
 
-            if (
-                !allowedFormats.includes(format)
-            ) {
+            /*
+            -------------------------------------------------
+            AUDIO
+            -------------------------------------------------
+            */
 
-                return res.status(400).json({
+            if (format !== "mp4") {
 
-                    success: false,
+                args.push(
+                    "--extract-audio",
+                    "--audio-format",
+                    format
+                );
 
-                    error:
-                        "Dieses Ausgabeformat wird nicht unterstützt."
+                /*
+                WAV / FLAC brauchen keine Bitrate.
+                */
 
+                if (
+                    format === "mp3" ||
+                    format === "m4a" ||
+                    format === "aac" ||
+                    format === "ogg"
+                ) {
+
+                    args.push(
+                        "--audio-quality",
+                        `${quality}K`
+                    );
+
+                }
+
+            } else {
+
+                /*
+                -------------------------------------------------
+                VIDEO MP4
+                -------------------------------------------------
+                */
+
+                args.push(
+                    "--merge-output-format",
+                    "mp4"
+                );
+
+            }
+
+            args.push(url);
+
+            /*
+            -------------------------------------------------
+            DOWNLOAD
+            -------------------------------------------------
+            */
+
+            await execFileAsync(
+                "yt-dlp",
+                args,
+                {
+                    cwd: workDir,
+                    maxBuffer: 1024 * 1024 * 10
+                }
+            );
+
+            /*
+            -------------------------------------------------
+            DATEI SUCHEN
+            -------------------------------------------------
+            */
+
+            const files =
+                fs.readdirSync(workDir);
+
+            const mediaFile =
+                files.find(file =>
+                    file !== finalFilename &&
+                    /\.(mp3|mp4|m4a|wav|flac|aac|ogg)$/i.test(file)
+                );
+
+            if (!mediaFile) {
+
+                throw new Error(
+                    "Die konvertierte Datei wurde nicht gefunden."
+                );
+
+            }
+
+            const generatedPath =
+                path.join(
+                    workDir,
+                    mediaFile
+                );
+
+            /*
+            -------------------------------------------------
+            DATEI AUF FINALEN NAMEN VERSCHIEBEN
+            -------------------------------------------------
+            */
+
+            fs.renameSync(
+                generatedPath,
+                finalPath
+            );
+
+            const stats =
+                fs.statSync(finalPath);
+
+            const sizeMB =
+                (
+                    stats.size /
+                    1024 /
+                    1024
+                ).toFixed(2);
+
+            /*
+            -------------------------------------------------
+            DOWNLOAD-ID
+            -------------------------------------------------
+            */
+
+            const downloadId =
+                crypto.randomBytes(16).toString("hex");
+
+            /*
+            -------------------------------------------------
+            TEMPORÄRE DOWNLOAD-DATEI SPEICHERN
+            -------------------------------------------------
+            */
+
+            const downloadDir =
+                path.join(
+                    TMP_DIR,
+                    "downloads"
+                );
+
+            if (!fs.existsSync(downloadDir)) {
+                fs.mkdirSync(downloadDir, {
+                    recursive: true
                 });
             }
 
-            /* =================================================
-               DATEINAME
-            ================================================= */
-
-            const requestedName =
-                String(
-                    req.body.filename ||
-                    "mediaforge-download"
-                );
-
-            const safeName =
-                requestedName
-                    .replace(
-                        /[^a-zA-Z0-9äöüÄÖÜéèà._ -]/g,
-                        ""
-                    )
-                    .trim()
-                    .slice(0, 100) ||
-                "mediaforge-download";
-
-            /* =================================================
-               AUDIO QUALITÄT
-            ================================================= */
-
-            const audioQuality =
-                String(
-                    req.body.audioQuality || "192"
-                );
-
-            const allowedAudioQualities = [
-                "128",
-                "192",
-                "256",
-                "320"
-            ];
-
-            const safeAudioQuality =
-                allowedAudioQualities.includes(
-                    audioQuality
-                )
-                    ? audioQuality
-                    : "192";
-
-            /* =================================================
-               URL DOWNLOAD
-            ================================================= */
-
-            if (url) {
-
-                if (!isHttpUrl(url)) {
-
-                    return res.status(400).json({
-
-                        success: false,
-
-                        error:
-                            "Ungültige URL."
-
-                    });
-                }
-
-                if (!isSupportedPlatform(url)) {
-
-                    return res.status(400).json({
-
-                        success: false,
-
-                        error:
-                            "Diese Plattform wird nicht unterstützt."
-
-                    });
-                }
-
-                console.log(
-                    "======================================"
-                );
-
-                console.log(
-                    "URL DOWNLOAD"
-                );
-
-                console.log(url);
-
-                console.log(
-                    "======================================"
-                );
-
-                const ytDlpAvailable =
-                    await commandAvailable("yt-dlp");
-
-                if (!ytDlpAvailable) {
-
-                    throw new Error(
-                        "yt-dlp ist auf dem Server nicht verfügbar."
-                    );
-                }
-
-                const tempId =
-                    crypto
-                        .randomBytes(16)
-                        .toString("hex");
-
-                const template =
-                    path.join(
-                        TEMP_DIR,
-                        `${tempId}.%(ext)s`
-                    );
-
-                /*
-                 * WICHTIG:
-                 *
-                 * Wir laden zunächst das beste
-                 * verfügbare Format herunter.
-                 *
-                 * Danach übernimmt FFmpeg
-                 * die Konvertierung.
-                 */
-
-                const ytDlpArgs = [
-
-                    "--no-playlist",
-
-                    "--no-warnings",
-
-                    "--restrict-filenames",
-
-                    "--no-part",
-
-                    "--remote-components",
-                    "ejs:github",
-
-                    "-f",
-                    "bv*+ba/b",
-
-                    "--merge-output-format",
-                    "mp4",
-
-                    "--retries",
-                    "5",
-
-                    "--fragment-retries",
-                    "5",
-
-                    "--retry-sleep",
-                    "2",
-
-                    "--socket-timeout",
-                    "30",
-
-                    "-o",
-                    template,
-
-                    url
-
-                ];
-
-                console.log(
-                    "yt-dlp startet..."
-                );
-
-                const result =
-                    await runCommand(
-                        "yt-dlp",
-                        ytDlpArgs
-                    );
-
-                console.log(
-                    "yt-dlp beendet."
-                );
-
-                console.log(
-                    result.stdout
-                );
-
-                console.log(
-                    result.stderr
-                );
-
-                const files =
-                    fs.readdirSync(
-                        TEMP_DIR
-                    );
-
-                const downloaded =
-                    files.find(
-                        filename =>
-                            filename.startsWith(
-                                tempId
-                            )
-                    );
-
-                if (!downloaded) {
-
-                    throw new Error(
-                        "yt-dlp hat keine Datei erzeugt."
-                    );
-                }
-
-                inputFile =
-                    path.join(
-                        TEMP_DIR,
-                        downloaded
-                    );
-
-                console.log(
-                    "Download gefunden:",
-                    inputFile
-                );
-            }
-
-            /* =================================================
-               DATEI-UPLOAD
-            ================================================= */
-
-            else {
-
-                if (!req.file) {
-
-                    return res.status(400).json({
-
-                        success: false,
-
-                        error:
-                            "Bitte eine URL oder Datei auswählen."
-
-                    });
-                }
-
-                inputFile =
-                    req.file.path;
-            }
-
-            /* =================================================
-               INPUT PRÜFEN
-            ================================================= */
-
-            if (
-                !inputFile ||
-                !fs.existsSync(inputFile)
-            ) {
-
-                throw new Error(
-                    "Eingabedatei wurde nicht gefunden."
-                );
-            }
-
-            /* =================================================
-               FFMPEG PRÜFEN
-            ================================================= */
-
-            const ffmpegAvailable =
-                await commandAvailable("ffmpeg");
-
-            if (!ffmpegAvailable) {
-
-                throw new Error(
-                    "FFmpeg ist nicht verfügbar."
-                );
-            }
-
-            /* =================================================
-               OUTPUT
-            ================================================= */
-
-            const outputName =
-                `${safeName}-${Date.now()}.${format}`;
-
-            outputFile =
+            const downloadPath =
                 path.join(
-                    DOWNLOAD_DIR,
-                    outputName
+                    downloadDir,
+                    `${downloadId}-${finalFilename}`
                 );
 
-            /* =================================================
-               FFMPEG
-            ================================================= */
-
-            const ffmpegArgs = [
-
-                "-y",
-
-                "-i",
-                inputFile
-
-            ];
-
-            /* =================================================
-               MP3
-            ================================================= */
-
-            if (format === "mp3") {
-
-                ffmpegArgs.push(
-
-                    "-vn",
-
-                    "-codec:a",
-                    "libmp3lame",
-
-                    "-b:a",
-                    `${safeAudioQuality}k`
-
-                );
-            }
-
-            /* =================================================
-               M4A
-            ================================================= */
-
-            else if (format === "m4a") {
-
-                ffmpegArgs.push(
-
-                    "-vn",
-
-                    "-codec:a",
-                    "aac",
-
-                    "-b:a",
-                    `${safeAudioQuality}k`
-
-                );
-            }
-
-            /* =================================================
-               WAV
-            ================================================= */
-
-            else if (format === "wav") {
-
-                ffmpegArgs.push(
-
-                    "-vn",
-
-                    "-codec:a",
-                    "pcm_s16le"
-
-                );
-            }
-
-            /* =================================================
-               FLAC
-            ================================================= */
-
-            else if (format === "flac") {
-
-                ffmpegArgs.push(
-
-                    "-vn",
-
-                    "-codec:a",
-                    "flac"
-
-                );
-            }
-
-            /* =================================================
-               AAC
-            ================================================= */
-
-            else if (format === "aac") {
-
-                ffmpegArgs.push(
-
-                    "-vn",
-
-                    "-codec:a",
-                    "aac",
-
-                    "-b:a",
-                    `${safeAudioQuality}k`
-
-                );
-            }
-
-            /* =================================================
-               OGG
-            ================================================= */
-
-            else if (format === "ogg") {
-
-                ffmpegArgs.push(
-
-                    "-vn",
-
-                    "-codec:a",
-                    "libvorbis",
-
-                    "-b:a",
-                    `${safeAudioQuality}k`
-
-                );
-            }
-
-            /* =================================================
-               MP4
-            ================================================= */
-
-            else if (format === "mp4") {
-
-                ffmpegArgs.push(
-
-                    "-map",
-                    "0:v:0?",
-
-                    "-map",
-                    "0:a:0?",
-
-                    "-c:v",
-                    "libx264",
-
-                    "-preset",
-                    "veryfast",
-
-                    "-crf",
-                    "23",
-
-                    "-c:a",
-                    "aac",
-
-                    "-b:a",
-                    `${safeAudioQuality}k`
-
-                );
-            }
-
-            /* =================================================
-               NORMALIZE
-            ================================================= */
-
-            if (
-                req.body.normalizeAudio === "true"
-            ) {
-
-                ffmpegArgs.push(
-
-                    "-af",
-                    "loudnorm"
-
-                );
-            }
-
-            /* =================================================
-               METADATEN
-            ================================================= */
-
-            if (
-                req.body.removeMetadata === "true"
-            ) {
-
-                ffmpegArgs.push(
-
-                    "-map_metadata",
-                    "-1"
-
-                );
-            }
-
-            ffmpegArgs.push(
-                outputFile
+            fs.copyFileSync(
+                finalPath,
+                downloadPath
             );
 
-            console.log(
-                "FFmpeg startet..."
-            );
+            /*
+            -------------------------------------------------
+            URL ZUM DOWNLOAD
+            -------------------------------------------------
+            */
 
-            await runCommand(
-                "ffmpeg",
-                ffmpegArgs
-            );
+            const protocol =
+                req.headers["x-forwarded-proto"] ||
+                req.protocol;
 
-            /* =================================================
-               OUTPUT PRÜFEN
-            ================================================= */
-
-            if (
-                !fs.existsSync(outputFile)
-            ) {
-
-                throw new Error(
-                    "FFmpeg hat keine Ausgabedatei erzeugt."
-                );
-            }
-
-            const stats =
-                fs.statSync(
-                    outputFile
-                );
-
-            /* =================================================
-               INPUT LÖSCHEN
-            ================================================= */
-
-            removeFile(
-                inputFile
-            );
-
-            inputFile = null;
-
-            /* =================================================
-               DOWNLOAD URL
-            ================================================= */
+            const host =
+                req.get("host");
 
             const downloadUrl =
-                `${getBaseUrl(req)}/downloads/${encodeURIComponent(outputName)}`;
+                `${protocol}://${host}/api/download/${encodeURIComponent(
+                    downloadId
+                )}/${encodeURIComponent(
+                    finalFilename
+                )}`;
 
-            return res.json({
+            /*
+            -------------------------------------------------
+            ANTWORT
+            -------------------------------------------------
+            */
 
+            res.json({
                 success: true,
-
-                filename:
-                    outputName,
-
-                size:
-                    formatBytes(
-                        stats.size
-                    ),
-
-                downloadUrl
-
+                filename: finalFilename,
+                format: extension,
+                size: `${sizeMB} MB`,
+                downloadUrl: downloadUrl
             });
+
+            /*
+            -------------------------------------------------
+            WORKDIR LÖSCHEN
+            -------------------------------------------------
+            */
+
+            setTimeout(() => {
+
+                try {
+                    fs.rmSync(workDir, {
+                        recursive: true,
+                        force: true
+                    });
+                } catch {}
+
+            }, 5000);
 
         } catch (error) {
 
             console.error(
-                "MEDIAFORGE FEHLER:",
+                "MediaForge conversion error:",
                 error
             );
 
-            if (inputFile) {
+            try {
+                fs.rmSync(workDir, {
+                    recursive: true,
+                    force: true
+                });
+            } catch {}
 
-                removeFile(
-                    inputFile
-                );
-            }
-
-            if (
-                outputFile &&
-                fs.existsSync(outputFile)
-            ) {
-
-                removeFile(
-                    outputFile
-                );
-            }
-
-            return res.status(500).json({
-
+            res.status(500).json({
                 success: false,
-
                 error:
-                    getFriendlyError(
-                        error
-                    )
-
+                    "Download/Umwandlung fehlgeschlagen.",
+                details:
+                    error.message || "Unbekannter Fehler."
             });
+
         }
+
     }
 );
 
-/* =========================================================
-   DOWNLOADS
-========================================================= */
+/*
+=========================================================
+DOWNLOAD ENDPOINT
+=========================================================
+*/
 
-app.use(
-    "/downloads",
-    express.static(
-        DOWNLOAD_DIR
-    )
+app.get(
+    "/api/download/:id/:filename",
+    async (req, res) => {
+
+        const id =
+            String(req.params.id);
+
+        const filename =
+            cleanFilename(
+                decodeURIComponent(
+                    req.params.filename
+                )
+            );
+
+        const downloadDir =
+            path.join(
+                TMP_DIR,
+                "downloads"
+            );
+
+        const files =
+            fs.readdirSync(downloadDir);
+
+        const matchingFile =
+            files.find(file =>
+                file.startsWith(id + "-")
+            );
+
+        if (!matchingFile) {
+
+            return res.status(404).send(
+                "Datei nicht mehr verfügbar."
+            );
+
+        }
+
+        const filePath =
+            path.join(
+                downloadDir,
+                matchingFile
+            );
+
+        /*
+        -------------------------------------------------
+        SAFARI / IPHONE DOWNLOAD
+        -------------------------------------------------
+        */
+
+        const extension =
+            path.extname(filename)
+                .replace(".", "")
+                .toLowerCase();
+
+        res.setHeader(
+            "Content-Type",
+            getContentType(extension)
+        );
+
+        /*
+        WICHTIG:
+        attachment sorgt dafür,
+        dass der Browser die Datei
+        als Download behandelt.
+        */
+
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${filename}"`
+        );
+
+        res.setHeader(
+            "Content-Length",
+            fs.statSync(filePath).size
+        );
+
+        res.setHeader(
+            "Cache-Control",
+            "no-store"
+        );
+
+        res.setHeader(
+            "X-Content-Type-Options",
+            "nosniff"
+        );
+
+        res.sendFile(
+            path.resolve(filePath),
+            error => {
+
+                if (error) {
+                    console.error(
+                        "Download error:",
+                        error
+                    );
+                }
+
+            }
+        );
+
+        /*
+        -------------------------------------------------
+        DATEI NACH EINIGER ZEIT LÖSCHEN
+        -------------------------------------------------
+        */
+
+        setTimeout(() => {
+
+            try {
+
+                if (
+                    fs.existsSync(filePath)
+                ) {
+
+                    fs.unlinkSync(
+                        filePath
+                    );
+
+                }
+
+            } catch {}
+
+        }, 10 * 60 * 1000);
+
+    }
 );
 
-/* =========================================================
-   URL
-========================================================= */
-
-function isHttpUrl(value) {
-
-    try {
-
-        const parsed =
-            new URL(value);
-
-        return (
-            parsed.protocol === "http:" ||
-            parsed.protocol === "https:"
-        );
-
-    } catch {
-
-        return false;
-    }
-}
-
-/* =========================================================
-   PLATTFORM
-========================================================= */
-
-function isSupportedPlatform(value) {
-
-    try {
-
-        const hostname =
-            new URL(value)
-                .hostname
-                .toLowerCase()
-                .replace(
-                    /^www\./,
-                    ""
-                );
-
-        return (
-
-            hostname === "youtube.com" ||
-
-            hostname.endsWith(".youtube.com") ||
-
-            hostname === "youtu.be" ||
-
-            hostname === "tiktok.com" ||
-
-            hostname.endsWith(".tiktok.com") ||
-
-            hostname === "instagram.com" ||
-
-            hostname.endsWith(".instagram.com")
-
-        );
-
-    } catch {
-
-        return false;
-    }
-}
-
-/* =========================================================
-   COMMAND
-========================================================= */
-
-function runCommand(
-    command,
-    args
-) {
-
-    return new Promise(
-        (resolve, reject) => {
-
-            const child =
-                spawn(
-                    command,
-                    args,
-                    {
-                        env: process.env
-                    }
-                );
-
-            let stdout = "";
-            let stderr = "";
-
-            child.stdout.on(
-                "data",
-                data => {
-
-                    const text =
-                        data.toString();
-
-                    stdout += text;
-
-                    console.log(
-                        `[${command}]`,
-                        text.trim()
-                    );
-                }
-            );
-
-            child.stderr.on(
-                "data",
-                data => {
-
-                    const text =
-                        data.toString();
-
-                    stderr += text;
-
-                    console.log(
-                        `[${command}]`,
-                        text.trim()
-                    );
-                }
-            );
-
-            child.on(
-                "error",
-                error => {
-
-                    reject(error);
-                }
-            );
-
-            child.on(
-                "close",
-                code => {
-
-                    if (code === 0) {
-
-                        resolve({
-
-                            stdout,
-                            stderr
-
-                        });
-
-                    } else {
-
-                        const details =
-                            getCommandError(
-                                stderr
-                            );
-
-                        reject(
-
-                            new Error(
-
-                                `${command} wurde mit Code ${code} beendet. ${details}`
-
-                            )
-
-                        );
-                    }
-                }
-            );
-        }
-    );
-}
-
-/* =========================================================
-   COMMAND VERFÜGBAR
-========================================================= */
-
-function commandAvailable(
-    command
-) {
-
-    return new Promise(
-        resolve => {
-
-            const child =
-                spawn(
-                    command,
-                    ["--version"],
-                    {
-                        env: process.env
-                    }
-                );
-
-            let output = "";
-
-            child.stdout.on(
-                "data",
-                data => {
-
-                    output +=
-                        data.toString();
-
-                }
-            );
-
-            child.stderr.on(
-                "data",
-                data => {
-
-                    output +=
-                        data.toString();
-
-                }
-            );
-
-            child.on(
-                "error",
-                () => {
-
-                    resolve(false);
-
-                }
-            );
-
-            child.on(
-                "close",
-                code => {
-
-                    /*
-                     * FFmpeg kann auf diesem Container
-                     * Versioninformationen ausgeben,
-                     * obwohl der Prozess einen anderen
-                     * Exit-Code zurückgibt.
-                     *
-                     * Deshalb prüfen wir auch den Text.
-                     */
-
-                    if (
-                        output
-                            .toLowerCase()
-                            .includes(
-                                command.toLowerCase()
-                            )
-                    ) {
-
-                        resolve(true);
-
-                    } else {
-
-                        resolve(
-                            code === 0
-                        );
-
-                    }
-                }
-            );
-        }
-    );
-}
-
-/* =========================================================
-   COMMAND DIAGNOSE
-========================================================= */
-
-function commandDetails(
-    command
-) {
-
-    return new Promise(
-        resolve => {
-
-            const child =
-                spawn(
-                    command,
-                    ["--version"],
-                    {
-                        env: process.env
-                    }
-                );
-
-            let stdout = "";
-            let stderr = "";
-
-            child.stdout.on(
-                "data",
-                data => {
-
-                    stdout +=
-                        data.toString();
-
-                }
-            );
-
-            child.stderr.on(
-                "data",
-                data => {
-
-                    stderr +=
-                        data.toString();
-
-                }
-            );
-
-            child.on(
-                "error",
-                error => {
-
-                    resolve({
-
-                        available: false,
-
-                        exitCode: null,
-
-                        output: "",
-
-                        error:
-                            error.message
-
-                    });
-
-                }
-            );
-
-            child.on(
-                "close",
-                code => {
-
-                    const output =
-                        (
-                            stdout ||
-                            stderr
-                        ).slice(
-                            0,
-                            2000
-                        );
-
-                    resolve({
-
-                        available:
-                            output
-                                .toLowerCase()
-                                .includes(
-                                    command.toLowerCase()
-                                ) ||
-                            code === 0,
-
-                        exitCode:
-                            code,
-
-                        output
-
-                    });
-
-                }
-            );
-        }
-    );
-}
-
-/* =========================================================
-   FEHLER
-========================================================= */
-
-function getCommandError(
-    stderr
-) {
-
-    if (!stderr) {
-
-        return (
-            "Keine detaillierte Fehlermeldung verfügbar."
-        );
-    }
-
-    return stderr
-        .split("\n")
-        .map(
-            line =>
-                line.trim()
-        )
-        .filter(Boolean)
-        .slice(-15)
-        .join(" ");
-}
-
-/* =========================================================
-   BASE URL
-========================================================= */
-
-function getBaseUrl(
-    req
-) {
-
-    const forwardedProto =
-        req.headers["x-forwarded-proto"];
-
-    const protocol =
-        forwardedProto ||
-        req.protocol;
-
-    return (
-        `${protocol}://${req.get("host")}`
-    );
-}
-
-/* =========================================================
-   DELETE
-========================================================= */
-
-function removeFile(
-    file
-) {
-
-    try {
-
-        if (
-            file &&
-            fs.existsSync(file)
-        ) {
-
-            fs.unlinkSync(file);
-        }
-
-    } catch (error) {
-
-        console.error(
-            "Datei konnte nicht gelöscht werden:",
-            error
-        );
-    }
-}
-
-/* =========================================================
-   SIZE
-========================================================= */
-
-function formatBytes(
-    bytes
-) {
-
-    if (!bytes) {
-
-        return "0 Bytes";
-    }
-
-    const units = [
-        "Bytes",
-        "KB",
-        "MB",
-        "GB"
-    ];
-
-    const index =
-        Math.min(
-            Math.floor(
-                Math.log(bytes) /
-                Math.log(1024)
-            ),
-            units.length - 1
-        );
-
-    return `${(
-        bytes /
-        Math.pow(
-            1024,
-            index
-        )
-    ).toFixed(2)} ${units[index]}`;
-}
-
-/* =========================================================
-   FRIENDLY ERROR
-========================================================= */
-
-function getFriendlyError(
-    error
-) {
-
-    const message =
-        String(
-            error?.message ||
-            error
-        );
-
-    console.error(
-        "DETAILLIERTER FEHLER:",
-        message
-    );
-
-    return (
-        message.slice(
-            0,
-            2000
-        ) ||
-        "Unbekannter Serverfehler."
-    );
-}
-
-/* =========================================================
-   START
-========================================================= */
+/*
+=========================================================
+SERVER
+=========================================================
+*/
 
 app.listen(
     PORT,
+    "0.0.0.0",
     () => {
 
         console.log(
